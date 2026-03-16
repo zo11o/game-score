@@ -1,7 +1,7 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { api, getCurrentUser, isUnauthorizedError } from '@/lib/api';
 import { useRoomSocket } from '@/lib/use-room-socket';
 import type {
@@ -43,6 +43,8 @@ const GAME_TYPE_LABELS: Record<Room['gameType'], string> = {
 
 const DRAW_CARD_WIDTH = 56;
 const DRAW_CARD_HEIGHT = 80;
+const DEAL_ALLOCATIONS_STORAGE_PREFIX = 'game-score:deal-allocations:';
+const DEFAULT_DEAL_COUNT = '7';
 const SORTABLE_RANK_ORDER = ['RJ', 'BJ', 'A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3', '2'] as const;
 const SORTABLE_SUIT_ORDER: Record<PlayingCard['suit'], number> = {
   joker: 0,
@@ -84,6 +86,54 @@ function sortPlayingCards(cards: PlayingCard[]): PlayingCard[] {
 
     return left.code.localeCompare(right.code);
   });
+}
+
+function getCardScoreKey(card: PlayingCard): string {
+  return card.code === 'RJ' || card.code === 'BJ' ? card.code : card.rank;
+}
+
+function getCardSummaryLabel(card: PlayingCard): string {
+  return card.code === 'RJ' || card.code === 'BJ' ? card.label : card.rank;
+}
+
+function getDealAllocationStorageKey(roomId: string): string {
+  return `${DEAL_ALLOCATIONS_STORAGE_PREFIX}${roomId}`;
+}
+
+function readDealAllocationCache(roomId: string): Record<string, string> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getDealAllocationStorageKey(roomId));
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeDealAllocationCache(roomId: string, allocations: Record<string, string>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(getDealAllocationStorageKey(roomId), JSON.stringify(allocations));
+  } catch {
+    // Ignore storage errors and keep the in-memory allocations only.
+  }
 }
 
 function RecordsPanel({
@@ -172,13 +222,57 @@ function ClickableCardFace({
     return <div className="relative">{content}</div>;
   }
 
+  const lastTouchTimestampRef = useRef(0);
+  const suppressClickUntilRef = useRef(0);
+
+  const triggerToggle = () => {
+    if (isDisabled) {
+      return;
+    }
+
+    onPress();
+  };
+
+  const handleDoubleClick = () => {
+    triggerToggle();
+  };
+
+  const handleTouchEnd = () => {
+    if (isDisabled) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastTouchTimestampRef.current <= 320) {
+      lastTouchTimestampRef.current = 0;
+      suppressClickUntilRef.current = now + 400;
+      triggerToggle();
+      return;
+    }
+
+    lastTouchTimestampRef.current = now;
+  };
+
+  const handleClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (Date.now() < suppressClickUntilRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    event.preventDefault();
+  };
+
   return (
     <button
       type="button"
-      onClick={onPress}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
+      onTouchEnd={handleTouchEnd}
       disabled={isDisabled}
-      className="relative transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-      aria-label={`${card.label} ${card.isFaceUp ? '已亮牌，点击收回' : '未亮牌，点击公开'}`}
+      className="relative select-none touch-manipulation transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+      aria-label={`${card.label} ${card.isFaceUp ? '已亮牌，双击收回' : '未亮牌，双击公开'}`}
+      title={card.isFaceUp ? '双击扣回这张牌' : '双击亮出这张牌'}
     >
       {content}
     </button>
@@ -228,10 +322,17 @@ function HandStrip({
   const hiddenCount = hand.hiddenCount;
   const hasCards = visibleCount > 0 || hiddenCount > 0;
   const displayCards = isSelf ? sortPlayingCards(hand.visibleCards) : hand.visibleCards;
+  const unrevealedCards = isSelf ? displayCards.filter((card) => !card.isFaceUp) : [];
+  const suggestedScore = new Set(unrevealedCards.map(getCardScoreKey)).size;
 
   return (
     <div className="mt-3 w-full">
       <p className="text-[11px] text-slate-400 text-center mb-2">本轮手牌</p>
+      {isSelf && visibleCount > 0 && (
+        <p className="mb-2 text-[10px] text-center text-amber-300/80">
+          双击卡牌可亮牌或扣回
+        </p>
+      )}
       {hasCards ? (
         <div className="flex flex-wrap justify-center gap-2">
           {displayCards.map((card) => (
@@ -264,9 +365,30 @@ function HandStrip({
           >
             {currentRound.remainingCardCount > 0 ? '抽一张' : '牌堆已空'}
           </Button>
-          <p className="text-[11px] text-slate-500">
-            本轮剩余牌堆 {currentRound.remainingCardCount} 张
-          </p>
+          <div className="w-full rounded-2xl border border-emerald-500/35 bg-slate-950/35 px-3 py-3">
+            <p className="text-[11px] text-center uppercase tracking-[0.24em] text-emerald-300/80">
+              未亮牌统计
+            </p>
+            {unrevealedCards.length > 0 ? (
+              <>
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                  {unrevealedCards.map((card, index) => (
+                    <span
+                      key={`${card.code}-${index}`}
+                      className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-100"
+                    >
+                      {getCardSummaryLabel(card)}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-2 text-sm text-center text-emerald-100">
+                  应给分: <span className="font-bold text-emerald-300">{suggestedScore}</span>
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-center text-slate-400">未亮牌已全部公开，应给分 0</p>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -281,7 +403,6 @@ export default function RoomPage() {
   const [records, setRecords] = useState<ScoreRecord[]>([]);
   const [currentRound, setCurrentRound] = useState<CurrentRound | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [selectedToggleCard, setSelectedToggleCard] = useState<PlayingCard | null>(null);
   const [points, setPoints] = useState(1);
   const [loading, setLoading] = useState(true);
   const [isDrawingCard, setIsDrawingCard] = useState(false);
@@ -411,14 +532,31 @@ export default function RoomPage() {
 
   const isOwner = !!room && !!currentUser && room.creatorId === currentUser.id;
   const isPokerRoom = room?.gameType === 'poker_rounds';
+  const orderedUsers = useMemo(() => {
+    if (!currentUser) {
+      return users;
+    }
+
+    return [...users].sort((left, right) => {
+      if (left.id === currentUser.id) {
+        return -1;
+      }
+
+      if (right.id === currentUser.id) {
+        return 1;
+      }
+
+      return 0;
+    });
+  }, [currentUser, users]);
   const currentUserHand = useMemo(
     () => (currentUser ? getHandForUser(currentRound, currentUser.id) : null),
     [currentRound, currentUser]
   );
 
   const roundTotal = useMemo(
-    () => users.reduce((sum, user) => sum + Number(allocations[user.id] ?? 0), 0),
-    [allocations, users]
+    () => orderedUsers.reduce((sum, user) => sum + Number(allocations[user.id] ?? 0), 0),
+    [allocations, orderedUsers]
   );
 
   const drawInteractionLocked = isDrawingCard || !!activeDraw || pendingDraws.length > 0;
@@ -447,10 +585,9 @@ export default function RoomPage() {
   };
 
   const openDealModal = () => {
-    const nextAllocations = users.reduce<Record<string, string>>((acc, user) => {
-      const hand = getHandForUser(currentRound, user.id);
-      const previousCount = hand ? Math.max(hand.hiddenCount, hand.visibleCards.length) : 1;
-      acc[user.id] = String(previousCount);
+    const cachedAllocations = readDealAllocationCache(roomId);
+    const nextAllocations = orderedUsers.reduce<Record<string, string>>((acc, user) => {
+      acc[user.id] = cachedAllocations[user.id] ?? DEFAULT_DEAL_COUNT;
       return acc;
     }, {});
     setAllocations(nextAllocations);
@@ -500,13 +637,14 @@ export default function RoomPage() {
       return;
     }
 
-    const payload: DealAllocation[] = users.map((user) => ({
+    const payload: DealAllocation[] = orderedUsers.map((user) => ({
       userId: user.id,
       cardCount: Number(allocations[user.id] ?? 0),
     }));
 
     try {
       await api.dealRound(room.id, payload);
+      writeDealAllocationCache(room.id, allocations);
       dealRoundModal.onClose();
       await fetchRoom();
     } catch (err) {
@@ -537,16 +675,15 @@ export default function RoomPage() {
     }
   };
 
-  const handleToggleCardVisibility = async () => {
-    if (!room || !selectedToggleCard) {
+  const handleToggleCardVisibility = async (card: PlayingCard) => {
+    if (!room) {
       return;
     }
 
     setIsTogglingCard(true);
 
     try {
-      await api.toggleCardVisibility(room.id, selectedToggleCard.code);
-      setSelectedToggleCard(null);
+      await api.toggleCardVisibility(room.id, card.code);
       await fetchRoom();
     } catch (err) {
       if (isUnauthorizedError(err)) {
@@ -666,7 +803,7 @@ export default function RoomPage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-            {users.map((user) => {
+            {orderedUsers.map((user) => {
               const hand = getHandForUser(currentRound, user.id);
               const isSelf = user.id === currentUser.id;
 
@@ -713,7 +850,7 @@ export default function RoomPage() {
                           canDraw={isSelf && canDraw}
                           isDrawing={isSelf && drawInteractionLocked}
                           onDraw={handleDrawCard}
-                          onCardPress={setSelectedToggleCard}
+                          onCardPress={handleToggleCardVisibility}
                           isTogglingCard={isSelf && isTogglingCard}
                         />
                       )}
@@ -723,57 +860,6 @@ export default function RoomPage() {
               );
             })}
           </div>
-
-          <Modal
-            isOpen={!!selectedToggleCard}
-            onOpenChange={(open) => !open && setSelectedToggleCard(null)}
-            placement="center"
-            size="md"
-            scrollBehavior="inside"
-            classNames={{
-              base: 'bg-slate-800 border border-purple-500/50',
-              header: 'border-b border-default-200',
-              body: 'py-6',
-              footer: 'border-t border-default-200',
-            }}
-          >
-            <ModalContent>
-              {selectedToggleCard && (
-                <>
-                  <ModalHeader className="flex flex-col gap-1 text-purple-400">
-                    {selectedToggleCard.isFaceUp ? '确认收回亮牌' : '确认公开亮牌'}
-                  </ModalHeader>
-                  <ModalBody>
-                    <div className="flex flex-col items-center gap-4">
-                      <ClickableCardFace card={selectedToggleCard} faceUpLabel={selectedToggleCard.isFaceUp ? '已亮' : undefined} />
-                      <p className="text-sm text-slate-300 text-center">
-                        {selectedToggleCard.isFaceUp
-                          ? `确定要把 ${selectedToggleCard.label} 扣回去吗？扣回后其他玩家将看不到这张牌。`
-                          : `确定要把 ${selectedToggleCard.label} 翻面给大家看吗？公开后房间里的其他玩家都能看到它。`}
-                      </p>
-                    </div>
-                  </ModalBody>
-                  <ModalFooter>
-                    <Button
-                      variant="light"
-                      onPress={() => setSelectedToggleCard(null)}
-                      className="whitespace-nowrap"
-                    >
-                      取消
-                    </Button>
-                    <Button
-                      color={selectedToggleCard.isFaceUp ? 'warning' : 'secondary'}
-                      onPress={handleToggleCardVisibility}
-                      isLoading={isTogglingCard}
-                      className="whitespace-nowrap"
-                    >
-                      {selectedToggleCard.isFaceUp ? '确认扣回' : '确认亮牌'}
-                    </Button>
-                  </ModalFooter>
-                </>
-              )}
-            </ModalContent>
-          </Modal>
 
           <Modal
             isOpen={!!selectedUser}
@@ -866,7 +952,7 @@ export default function RoomPage() {
                   每轮都会重新收牌、洗出一副全新的 54 张扑克牌；未发出的牌会保留为本轮剩余牌堆，供后续抽牌使用。
                 </p>
                 <div className="space-y-3">
-                  {users.map((user) => (
+                  {orderedUsers.map((user) => (
                     <div
                       key={user.id}
                       className="flex items-center gap-3 rounded-xl border border-purple-500/20 bg-slate-900/60 p-3"
@@ -888,7 +974,7 @@ export default function RoomPage() {
                       <Input
                         type="number"
                         min={0}
-                        value={allocations[user.id] ?? '1'}
+                        value={allocations[user.id] ?? DEFAULT_DEAL_COUNT}
                         aria-label={`${user.name} 发牌张数`}
                         onValueChange={(value) =>
                           setAllocations((prev) => ({

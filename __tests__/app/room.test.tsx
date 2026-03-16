@@ -106,6 +106,29 @@ describe('Room Page', () => {
     expect(screen.getByText('User2')).toBeInTheDocument();
   });
 
+  it('should always place the current user first', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({ users: ['2', '1'] }),
+      users: [mockUser2, mockUser1],
+      scores: {},
+      records: [],
+      currentRound: null,
+    });
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Room')).toBeInTheDocument();
+    });
+
+    const orderedUsers = screen
+      .getAllByText(/^User[12]$/)
+      .slice(0, 2)
+      .map((element) => element.textContent);
+
+    expect(orderedUsers).toEqual(['User1', 'User2']);
+  });
+
   it('should display user scores', async () => {
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom(),
@@ -312,6 +335,93 @@ describe('Room Page', () => {
     });
   });
 
+  it('should default the first round deal modal to 7 cards per player', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        creatorId: '1',
+        creatorName: 'User1',
+      }),
+      users: [mockUser1, mockUser2],
+      scores: {},
+      records: [],
+      currentRound: null,
+    });
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '开始第一轮' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '开始第一轮' }));
+
+    expect(screen.getByLabelText('User1 发牌张数')).toHaveValue(7);
+    expect(screen.getByLabelText('User2 发牌张数')).toHaveValue(7);
+  });
+
+  it('should reuse the last confirmed deal allocations from local cache', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        creatorId: '1',
+        creatorName: 'User1',
+      }),
+      users: [mockUser1, mockUser2],
+      scores: {},
+      records: [],
+      currentRound: null,
+    });
+    vi.mocked(api.dealRound).mockResolvedValue({ success: true } as never);
+
+    const { unmount } = render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '开始第一轮' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '开始第一轮' }));
+    fireEvent.change(screen.getByLabelText('User1 发牌张数'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('User2 发牌张数'), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认发牌' }));
+
+    await waitFor(() => {
+      expect(api.dealRound).toHaveBeenCalledWith('room1', [
+        { userId: '1', cardCount: 5 },
+        { userId: '2', cardCount: 8 },
+      ]);
+    });
+
+    unmount();
+    vi.clearAllMocks();
+    (useRouter as any).mockReturnValue({ push: mockPush });
+    (useParams as any).mockReturnValue({ id: 'room1' });
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser1);
+    vi.mocked(isUnauthorizedError).mockReturnValue(false);
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        creatorId: '1',
+        creatorName: 'User1',
+      }),
+      users: [mockUser1, mockUser2],
+      scores: {},
+      records: [],
+      currentRound: null,
+    });
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '开始第一轮' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '开始第一轮' }));
+
+    expect(screen.getByLabelText('User1 发牌张数')).toHaveValue(5);
+    expect(screen.getByLabelText('User2 发牌张数')).toHaveValue(8);
+  });
+
   it('should allow current user to draw one card from the remaining deck', async () => {
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom({
@@ -360,7 +470,7 @@ describe('Room Page', () => {
     });
   });
 
-  it('should confirm before toggling card visibility and mark face-up cards', async () => {
+  it('should toggle card visibility on double click and keep the face-up marker visible', async () => {
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom({
         gameType: 'poker_rounds',
@@ -417,14 +527,83 @@ describe('Room Page', () => {
       expect(screen.getByText('已亮')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByLabelText('A♠ 已亮牌，点击收回'));
+    const faceUpCard = screen.getByLabelText('A♠ 已亮牌，双击收回');
 
-    expect(screen.getByText('确认收回亮牌')).toBeInTheDocument();
+    fireEvent.click(faceUpCard);
+    expect(api.toggleCardVisibility).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: '确认扣回' }));
+    fireEvent.doubleClick(faceUpCard);
 
     await waitFor(() => {
       expect(api.toggleCardVisibility).toHaveBeenCalledWith('room1', 'SA');
     });
+
+    expect(screen.getByText('双击卡牌可亮牌或扣回')).toBeInTheDocument();
+    expect(screen.queryByText('确认收回亮牌')).not.toBeInTheDocument();
+  });
+
+  it('should support double tap on mobile to toggle card visibility', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        currentRoundNumber: 1,
+      }),
+      users: [mockUser1, mockUser2],
+      scores: { '1': 0, '2': 3 },
+      records: [],
+      currentRound: {
+        roundNumber: 1,
+        dealtAt: Date.now(),
+        remainingCardCount: 8,
+        hands: [
+          {
+            userId: '1',
+            visibleCards: [
+              {
+                code: 'KH',
+                rank: 'K',
+                suit: 'hearts',
+                label: 'K♥',
+                color: 'red',
+                isFaceUp: false,
+              },
+            ],
+            hiddenCount: 0,
+            isParticipant: true,
+          },
+          {
+            userId: '2',
+            visibleCards: [],
+            hiddenCount: 2,
+            isParticipant: true,
+          },
+        ],
+      },
+    });
+    vi.mocked(api.toggleCardVisibility).mockResolvedValue({
+      success: true,
+      isFaceUp: true,
+    } as never);
+
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValueOnce(1000);
+    nowSpy.mockReturnValueOnce(1200);
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('K♥ 未亮牌，双击公开')).toBeInTheDocument();
+    });
+
+    const hiddenCard = screen.getByLabelText('K♥ 未亮牌，双击公开');
+
+    fireEvent.touchEnd(hiddenCard);
+    fireEvent.touchEnd(hiddenCard);
+
+    await waitFor(() => {
+      expect(api.toggleCardVisibility).toHaveBeenCalledWith('room1', 'KH');
+    });
+
+    nowSpy.mockRestore();
   });
 });
