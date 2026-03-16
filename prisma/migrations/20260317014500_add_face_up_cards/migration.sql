@@ -1,0 +1,1 @@
+ALTER TABLE "RoomRoundCard" ADD COLUMN "isFaceUp" BOOLEAN NOT NULL DEFAULT false;

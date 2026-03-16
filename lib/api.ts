@@ -142,6 +142,16 @@ export const api = {
     );
   },
 
+  async toggleCardVisibility(roomId: string, cardCode: string) {
+    return handleResponse<{ success: true; isFaceUp: boolean }>(
+      await fetch(`/api/rooms/${roomId}/rounds/cards/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardCode }),
+      })
+    );
+  },
+
   async getUserHistory(userId: string): Promise<ParticipationHistory[]> {
     return handleResponse(await fetch(`/api/users/${userId}/history`));
   },

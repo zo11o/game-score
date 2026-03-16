@@ -24,6 +24,7 @@ vi.mock('@/lib/api', () => ({
     finishRoom: vi.fn(),
     dealRound: vi.fn(),
     drawCard: vi.fn(),
+    toggleCardVisibility: vi.fn(),
     getUserHistory: vi.fn(),
     logout: vi.fn(),
   },

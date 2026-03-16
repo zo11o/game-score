@@ -73,6 +73,7 @@ model RoomRoundCard {
   userId    String
   cardCode  String
   dealtOrder Int
+  isFaceUp  Boolean @default(false)
 
   round RoomRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
   user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -41,8 +41,8 @@ const GAME_TYPE_LABELS: Record<Room['gameType'], string> = {
   poker_rounds: '扑克轮次',
 };
 
-const DRAW_CARD_WIDTH = 44;
-const DRAW_CARD_HEIGHT = 64;
+const DRAW_CARD_WIDTH = 56;
+const DRAW_CARD_HEIGHT = 80;
 
 type AnimatedDraw = RoomDrawEvent & {
   startX: number;
@@ -103,19 +103,61 @@ function CardFace({ card }: { card: PlayingCard }) {
       : card.color === 'black'
         ? 'text-slate-100'
         : 'text-amber-300';
+  const faceUpClasses = card.isFaceUp
+    ? 'border-amber-400/80 shadow-[0_0_18px_rgba(251,191,36,0.25)]'
+    : 'border-purple-500/30';
 
   return (
-    <div className="w-11 h-16 rounded-lg border border-purple-500/30 bg-slate-950/90 shadow-sm flex flex-col items-center justify-center">
-      <span className={`text-[11px] font-bold leading-none ${colorClass}`}>{card.rank}</span>
-      <span className={`text-base font-bold leading-none ${colorClass}`}>{card.label.slice(-1)}</span>
+    <div className={`relative w-14 h-20 rounded-xl border bg-slate-950/90 shadow-sm flex flex-col items-center justify-center gap-1 ${faceUpClasses}`}>
+      <span className={`text-sm font-bold leading-none ${colorClass}`}>{card.rank}</span>
+      <span className={`text-[22px] font-bold leading-none ${colorClass}`}>{card.label.slice(-1)}</span>
     </div>
+  );
+}
+
+function ClickableCardFace({
+  card,
+  faceUpLabel,
+  onPress,
+  isDisabled,
+}: {
+  card: PlayingCard;
+  faceUpLabel?: string;
+  onPress?: () => void;
+  isDisabled?: boolean;
+}) {
+  const content = (
+    <>
+      <CardFace card={card} />
+      {card.isFaceUp && faceUpLabel && (
+        <span className="pointer-events-none absolute -right-2 -top-2 rounded-full border border-amber-300/80 bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-slate-950 shadow-md">
+          {faceUpLabel}
+        </span>
+      )}
+    </>
+  );
+
+  if (!onPress) {
+    return <div className="relative">{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      disabled={isDisabled}
+      className="relative transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+      aria-label={`${card.label} ${card.isFaceUp ? '已亮牌，点击收回' : '未亮牌，点击公开'}`}
+    >
+      {content}
+    </button>
   );
 }
 
 function CardBack({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`w-11 h-16 rounded-lg border border-pink-500/40 bg-gradient-to-br from-purple-700 via-slate-900 to-pink-600 shadow-sm flex items-center justify-center text-pink-100 text-xs font-bold ${className}`}
+      className={`w-14 h-20 rounded-xl border border-pink-500/40 bg-gradient-to-br from-purple-700 via-slate-900 to-pink-600 shadow-sm flex items-center justify-center text-pink-100 text-sm font-bold ${className}`}
     >
       ?
     </div>
@@ -130,6 +172,8 @@ function HandStrip({
   canDraw,
   isDrawing,
   onDraw,
+  onCardPress,
+  isTogglingCard,
 }: {
   currentRound: CurrentRound | null;
   hand: RoundHand | null;
@@ -138,6 +182,8 @@ function HandStrip({
   canDraw: boolean;
   isDrawing: boolean;
   onDraw: () => void;
+  onCardPress: (card: PlayingCard) => void;
+  isTogglingCard: boolean;
 }) {
   if (!currentRound) {
     return <p className="text-[11px] text-slate-500 mt-3 text-center">本轮未发牌</p>;
@@ -155,12 +201,19 @@ function HandStrip({
     <div className="mt-3 w-full">
       <p className="text-[11px] text-slate-400 text-center mb-2">本轮手牌</p>
       {hasCards ? (
-        <div className="flex flex-wrap justify-center gap-1.5">
-          {visibleCount > 0
-            ? hand.visibleCards.map((card) => <CardFace key={card.code} card={card} />)
-            : Array.from({ length: hiddenCount }, (_, index) => (
-                <CardBack key={`${hand.userId}-hidden-${index}`} />
-              ))}
+        <div className="flex flex-wrap justify-center gap-2">
+          {hand.visibleCards.map((card) => (
+            <ClickableCardFace
+              key={card.code}
+              card={card}
+              faceUpLabel={card.isFaceUp ? (isSelf ? '已亮' : '公开') : undefined}
+              onPress={isSelf ? () => onCardPress(card) : undefined}
+              isDisabled={isTogglingCard}
+            />
+          ))}
+          {Array.from({ length: hiddenCount }, (_, index) => (
+            <CardBack key={`${hand.userId}-hidden-${index}`} />
+          ))}
         </div>
       ) : (
         <p className="text-[11px] text-slate-500 text-center">当前无手牌</p>
@@ -196,9 +249,11 @@ export default function RoomPage() {
   const [records, setRecords] = useState<ScoreRecord[]>([]);
   const [currentRound, setCurrentRound] = useState<CurrentRound | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedToggleCard, setSelectedToggleCard] = useState<PlayingCard | null>(null);
   const [points, setPoints] = useState(1);
   const [loading, setLoading] = useState(true);
   const [isDrawingCard, setIsDrawingCard] = useState(false);
+  const [isTogglingCard, setIsTogglingCard] = useState(false);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [pendingDraws, setPendingDraws] = useState<RoomDrawEvent[]>([]);
   const [activeDraw, setActiveDraw] = useState<AnimatedDraw | null>(null);
@@ -450,6 +505,28 @@ export default function RoomPage() {
     }
   };
 
+  const handleToggleCardVisibility = async () => {
+    if (!room || !selectedToggleCard) {
+      return;
+    }
+
+    setIsTogglingCard(true);
+
+    try {
+      await api.toggleCardVisibility(room.id, selectedToggleCard.code);
+      setSelectedToggleCard(null);
+      await fetchRoom();
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        router.push('/login');
+        return;
+      }
+      alert(err instanceof Error ? err.message : '翻牌失败');
+    } finally {
+      setIsTogglingCard(false);
+    }
+  };
+
   const handleFinishRoom = async () => {
     if (!confirm('确定要结束游戏吗？结束后将无法继续打分。')) return;
 
@@ -510,7 +587,7 @@ export default function RoomPage() {
                     </span>
                   )}
                   <div className="flex items-center gap-3 rounded-2xl border border-pink-500/30 bg-slate-900/70 px-4 py-3">
-                    <div ref={deckRef} className="relative h-16 w-12 shrink-0">
+                    <div ref={deckRef} className="relative h-20 w-14 shrink-0">
                       <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-lg border border-purple-500/20 bg-slate-950/60" />
                       <CardBack className="absolute inset-0" />
                     </div>
@@ -604,6 +681,8 @@ export default function RoomPage() {
                           canDraw={isSelf && canDraw}
                           isDrawing={isSelf && drawInteractionLocked}
                           onDraw={handleDrawCard}
+                          onCardPress={setSelectedToggleCard}
+                          isTogglingCard={isSelf && isTogglingCard}
                         />
                       )}
                     </CardBody>
@@ -612,6 +691,57 @@ export default function RoomPage() {
               );
             })}
           </div>
+
+          <Modal
+            isOpen={!!selectedToggleCard}
+            onOpenChange={(open) => !open && setSelectedToggleCard(null)}
+            placement="center"
+            size="md"
+            scrollBehavior="inside"
+            classNames={{
+              base: 'bg-slate-800 border border-purple-500/50',
+              header: 'border-b border-default-200',
+              body: 'py-6',
+              footer: 'border-t border-default-200',
+            }}
+          >
+            <ModalContent>
+              {selectedToggleCard && (
+                <>
+                  <ModalHeader className="flex flex-col gap-1 text-purple-400">
+                    {selectedToggleCard.isFaceUp ? '确认收回亮牌' : '确认公开亮牌'}
+                  </ModalHeader>
+                  <ModalBody>
+                    <div className="flex flex-col items-center gap-4">
+                      <ClickableCardFace card={selectedToggleCard} faceUpLabel={selectedToggleCard.isFaceUp ? '已亮' : undefined} />
+                      <p className="text-sm text-slate-300 text-center">
+                        {selectedToggleCard.isFaceUp
+                          ? `确定要把 ${selectedToggleCard.label} 扣回去吗？扣回后其他玩家将看不到这张牌。`
+                          : `确定要把 ${selectedToggleCard.label} 翻面给大家看吗？公开后房间里的其他玩家都能看到它。`}
+                      </p>
+                    </div>
+                  </ModalBody>
+                  <ModalFooter>
+                    <Button
+                      variant="light"
+                      onPress={() => setSelectedToggleCard(null)}
+                      className="whitespace-nowrap"
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      color={selectedToggleCard.isFaceUp ? 'warning' : 'secondary'}
+                      onPress={handleToggleCardVisibility}
+                      isLoading={isTogglingCard}
+                      className="whitespace-nowrap"
+                    >
+                      {selectedToggleCard.isFaceUp ? '确认扣回' : '确认亮牌'}
+                    </Button>
+                  </ModalFooter>
+                </>
+              )}
+            </ModalContent>
+          </Modal>
 
           <Modal
             isOpen={!!selectedUser}

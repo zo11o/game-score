@@ -35,6 +35,7 @@ export function serializeCard(cardCode: string): PlayingCard {
       suit: 'joker',
       label: '小王',
       color: 'special',
+      isFaceUp: false,
     };
   }
 
@@ -45,6 +46,7 @@ export function serializeCard(cardCode: string): PlayingCard {
       suit: 'joker',
       label: '大王',
       color: 'special',
+      isFaceUp: false,
     };
   }
 
@@ -62,5 +64,6 @@ export function serializeCard(cardCode: string): PlayingCard {
     suit: suitMeta.suit,
     label: `${rank}${suitMeta.symbol}`,
     color: suitMeta.color,
+    isFaceUp: false,
   };
 }

@@ -25,6 +25,7 @@ vi.mock('@/lib/api', () => ({
     finishRoom: vi.fn(),
     dealRound: vi.fn(),
     drawCard: vi.fn(),
+    toggleCardVisibility: vi.fn(),
     getUserHistory: vi.fn(),
     logout: vi.fn(),
   },
@@ -249,9 +250,10 @@ describe('Room Page', () => {
                 suit: 'spades',
                 label: 'A♠',
                 color: 'black',
+                isFaceUp: false,
               },
             ],
-            hiddenCount: 1,
+            hiddenCount: 0,
             isParticipant: true,
           },
           {
@@ -355,6 +357,74 @@ describe('Room Page', () => {
 
     await waitFor(() => {
       expect(api.drawCard).toHaveBeenCalledWith('room1');
+    });
+  });
+
+  it('should confirm before toggling card visibility and mark face-up cards', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        currentRoundNumber: 1,
+      }),
+      users: [mockUser1, mockUser2],
+      scores: { '1': 0, '2': 3 },
+      records: [],
+      currentRound: {
+        roundNumber: 1,
+        dealtAt: Date.now(),
+        remainingCardCount: 8,
+        hands: [
+          {
+            userId: '1',
+            visibleCards: [
+              {
+                code: 'SA',
+                rank: 'A',
+                suit: 'spades',
+                label: 'A♠',
+                color: 'black',
+                isFaceUp: true,
+              },
+              {
+                code: 'KH',
+                rank: 'K',
+                suit: 'hearts',
+                label: 'K♥',
+                color: 'red',
+                isFaceUp: false,
+              },
+            ],
+            hiddenCount: 0,
+            isParticipant: true,
+          },
+          {
+            userId: '2',
+            visibleCards: [],
+            hiddenCount: 2,
+            isParticipant: true,
+          },
+        ],
+      },
+    });
+    vi.mocked(api.toggleCardVisibility).mockResolvedValue({
+      success: true,
+      isFaceUp: false,
+    } as never);
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('已亮')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText('A♠ 已亮牌，点击收回'));
+
+    expect(screen.getByText('确认收回亮牌')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '确认扣回' }));
+
+    await waitFor(() => {
+      expect(api.toggleCardVisibility).toHaveBeenCalledWith('room1', 'SA');
     });
   });
 });

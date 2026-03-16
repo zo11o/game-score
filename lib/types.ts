@@ -50,6 +50,7 @@ export interface PlayingCard {
   suit: 'spades' | 'hearts' | 'clubs' | 'diamonds' | 'joker';
   label: string;
   color: 'red' | 'black' | 'special';
+  isFaceUp: boolean;
 }
 
 export interface RoundHand {

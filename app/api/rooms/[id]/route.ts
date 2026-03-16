@@ -102,14 +102,14 @@ export async function GET(
       if (round) {
         const participantIds = new Set(parseStringArrayJson(round.participantUserIdsJson));
         const remainingDeck = parseStringArrayJson(round.remainingDeckJson);
-        const cardsByUser = new Map<string, string[]>();
+        const cardsByUser = new Map<string, typeof round.cards>();
         room.members.forEach((member) => {
           cardsByUser.set(member.userId, []);
         });
 
         round.cards.forEach((card) => {
           const userCards = cardsByUser.get(card.userId) ?? [];
-          userCards.push(card.cardCode);
+          userCards.push(card);
           cardsByUser.set(card.userId, userCards);
         });
 
@@ -118,11 +118,24 @@ export async function GET(
           dealtAt: round.createdAt.getTime(),
           remainingCardCount: remainingDeck.length,
           hands: room.members.map((member) => {
-            const cardCodes = cardsByUser.get(member.userId) ?? [];
+            const userCards = cardsByUser.get(member.userId) ?? [];
+            const visibleCards =
+              member.userId === session.user.id
+                ? userCards.map((card) => ({
+                    ...serializeCard(card.cardCode),
+                    isFaceUp: card.isFaceUp,
+                  }))
+                : userCards
+                    .filter((card) => card.isFaceUp)
+                    .map((card) => ({
+                      ...serializeCard(card.cardCode),
+                      isFaceUp: true,
+                    }));
+
             return {
               userId: member.userId,
-              visibleCards: member.userId === session.user.id ? cardCodes.map(serializeCard) : [],
-              hiddenCount: cardCodes.length,
+              visibleCards,
+              hiddenCount: member.userId === session.user.id ? 0 : userCards.length - visibleCards.length,
               isParticipant: participantIds.has(member.userId),
             };
           }),
