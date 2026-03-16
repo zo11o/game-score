@@ -205,6 +205,15 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-purple-300 mb-1">{room.name}</h3>
               <p className="text-sm text-slate-400 mb-2">创建者: {room.creatorName}</p>
+              <p className="text-xs text-slate-500 mb-2">
+                创建时间: {new Date(room.createdAt).toLocaleString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </p>
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <span>👥 {room.users.length} 人</span>
                 <span>
