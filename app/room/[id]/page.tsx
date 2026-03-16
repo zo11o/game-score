@@ -61,6 +61,16 @@ type AnimatedDraw = RoomDrawEvent & {
   endY: number;
 };
 
+type DealAnimation = {
+  id: string;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  delay: number;
+  rotation: number;
+};
+
 function getHandForUser(currentRound: CurrentRound | null, userId: string): RoundHand | null {
   return currentRound?.hands.find((item) => item.userId === userId) ?? null;
 }
@@ -196,6 +206,37 @@ function CardFace({ card }: { card: PlayingCard }) {
   );
 }
 
+function AnimatedCardFaceContent({
+  card,
+  faceUpLabel,
+}: {
+  card: PlayingCard;
+  faceUpLabel?: string;
+}) {
+  return (
+    <div className="relative [perspective:1000px]">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={`${card.code}-${card.isFaceUp ? 'up' : 'down'}`}
+          initial={{ rotateY: 90, opacity: 0.55, scale: 0.94 }}
+          animate={{ rotateY: 0, opacity: 1, scale: 1 }}
+          exit={{ rotateY: -90, opacity: 0.55, scale: 0.94 }}
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          className="relative"
+          style={{ transformStyle: 'preserve-3d' }}
+        >
+          <CardFace card={card} />
+          {card.isFaceUp && faceUpLabel && (
+            <span className="pointer-events-none absolute -right-2 -top-2 rounded-full border border-amber-300/80 bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-slate-950 shadow-md">
+              {faceUpLabel}
+            </span>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function ClickableCardFace({
   card,
   faceUpLabel,
@@ -207,16 +248,7 @@ function ClickableCardFace({
   onPress?: () => void;
   isDisabled?: boolean;
 }) {
-  const content = (
-    <>
-      <CardFace card={card} />
-      {card.isFaceUp && faceUpLabel && (
-        <span className="pointer-events-none absolute -right-2 -top-2 rounded-full border border-amber-300/80 bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-slate-950 shadow-md">
-          {faceUpLabel}
-        </span>
-      )}
-    </>
-  );
+  const content = <AnimatedCardFaceContent card={card} faceUpLabel={faceUpLabel} />;
 
   if (!onPress) {
     return <div className="relative">{content}</div>;
@@ -412,10 +444,12 @@ export default function RoomPage() {
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [pendingDraws, setPendingDraws] = useState<RoomDrawEvent[]>([]);
   const [activeDraw, setActiveDraw] = useState<AnimatedDraw | null>(null);
+  const [dealAnimations, setDealAnimations] = useState<DealAnimation[]>([]);
   const deckRef = useRef<HTMLDivElement | null>(null);
   const playerAreaRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const queuedRoomDataRef = useRef<RoomDetailsResponse | null>(null);
   const hasPendingAnimationRef = useRef(false);
+  const previousRoundNumberRef = useRef<number | null | undefined>(undefined);
   const recordsDrawer = useDisclosure();
   const dealRoundModal = useDisclosure();
   const router = useRouter();
@@ -531,6 +565,56 @@ export default function RoomPage() {
     hasPendingAnimationRef.current = false;
     flushQueuedRoomData();
   }, [activeDraw, flushQueuedRoomData, pendingDraws.length]);
+
+  useEffect(() => {
+    const nextRoundNumber = currentRound?.roundNumber ?? null;
+    const previousRoundNumber = previousRoundNumberRef.current;
+
+    if (previousRoundNumber === undefined) {
+      previousRoundNumberRef.current = nextRoundNumber;
+      return;
+    }
+
+    if (
+      currentRound &&
+      nextRoundNumber !== null &&
+      nextRoundNumber !== previousRoundNumber &&
+      deckRef.current
+    ) {
+      const deckRect = deckRef.current.getBoundingClientRect();
+      let animationIndex = 0;
+
+      const nextAnimations = currentRound.hands.flatMap((hand) => {
+        const targetElement = playerAreaRefs.current[hand.userId];
+        if (!targetElement) {
+          return [];
+        }
+
+        const targetRect = targetElement.getBoundingClientRect();
+        const totalCards = hand.visibleCards.length + hand.hiddenCount;
+
+        return Array.from({ length: totalCards }, (_, cardIndex) => {
+          const currentIndex = animationIndex++;
+
+          return {
+            id: `deal-${currentRound.roundNumber}-${hand.userId}-${cardIndex}`,
+            startX: deckRect.left + deckRect.width / 2 - DRAW_CARD_WIDTH / 2,
+            startY: deckRect.top + deckRect.height / 2 - DRAW_CARD_HEIGHT / 2,
+            endX: targetRect.left + targetRect.width / 2 - DRAW_CARD_WIDTH / 2,
+            endY: targetRect.top + targetRect.height / 2 - DRAW_CARD_HEIGHT / 2,
+            delay: currentIndex * 0.045,
+            rotation: ((currentIndex % 5) - 2) * 7,
+          };
+        });
+      });
+
+      if (nextAnimations.length > 0) {
+        setDealAnimations(nextAnimations);
+      }
+    }
+
+    previousRoundNumberRef.current = nextRoundNumber;
+  }, [currentRound]);
 
   const isOwner = !!room && !!currentUser && room.creatorId === currentUser.id;
   const isPokerRoom = room?.gameType === 'poker_rounds';
@@ -1095,6 +1179,37 @@ export default function RoomPage() {
       </div>
 
       <AnimatePresence>
+        {dealAnimations.map((animation) => (
+          <motion.div
+            key={animation.id}
+            className="pointer-events-none fixed left-0 top-0 z-[68]"
+            initial={{
+              x: animation.startX,
+              y: animation.startY,
+              rotate: -14,
+              scale: 0.88,
+              opacity: 0,
+            }}
+            animate={{
+              x: animation.endX,
+              y: animation.endY,
+              rotate: animation.rotation,
+              scale: 1,
+              opacity: 1,
+            }}
+            exit={{ opacity: 0 }}
+            transition={{
+              duration: 0.58,
+              delay: animation.delay,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            onAnimationComplete={() => {
+              setDealAnimations((prev) => prev.filter((item) => item.id !== animation.id));
+            }}
+          >
+            <CardBack className="shadow-[0_18px_40px_rgba(15,23,42,0.35)]" />
+          </motion.div>
+        ))}
         {activeDraw && (
           <motion.div
             key={activeDraw.drawId}
