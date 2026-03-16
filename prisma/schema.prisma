@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  avatar       String
+  createdAt    DateTime @default(now())
+
+  roomMemberships RoomMember[]
+  scoresGiven    Score[] @relation("ScoresFrom")
+  scoresReceived Score[] @relation("ScoresTo")
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  name      String
+  password  String
+  createdAt DateTime @default(now())
+
+  members RoomMember[]
+  scores  Score[]
+}
+
+model RoomMember {
+  id     String @id @default(cuid())
+  roomId String
+  userId String
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+}
+
+model Score {
+  id         String   @id @default(cuid())
+  roomId     String
+  fromUserId String
+  toUserId   String
+  points     Int
+  timestamp  DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  from User @relation("ScoresFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to   User @relation("ScoresTo", fields: [toUserId], references: [id], onDelete: Cascade)
+}

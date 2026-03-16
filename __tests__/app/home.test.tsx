@@ -1,0 +1,236 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { useRouter } from 'next/navigation';
+import Home from '@/app/page';
+import { getCurrentUser, api } from '@/lib/api';
+import type { User, Room } from '@/lib/types';
+
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(),
+}));
+
+vi.mock('@/lib/api', () => ({
+  getCurrentUser: vi.fn(),
+  setCurrentUser: vi.fn(),
+  api: {
+    register: vi.fn(),
+    login: vi.fn(),
+    getRooms: vi.fn(),
+    createRoom: vi.fn(),
+    getRoom: vi.fn(),
+    joinRoom: vi.fn(),
+    addScore: vi.fn(),
+  },
+}));
+
+describe('Home Page (Game Lobby)', () => {
+  const mockPush = vi.fn();
+  const mockUser: User = {
+    id: '1',
+    email: 'test@example.com',
+    name: 'TestUser',
+    avatar: 'https://example.com/avatar.png',
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    (useRouter as any).mockReturnValue({ push: mockPush });
+    vi.mocked(getCurrentUser).mockReturnValue(null);
+    vi.mocked(api.getRooms).mockResolvedValue([]);
+  });
+
+  it('should redirect to login if no current user', () => {
+    render(<Home />);
+
+    expect(mockPush).toHaveBeenCalledWith('/login');
+  });
+
+  it('should render game lobby for logged in user', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('游戏大厅')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('创建房间')).toBeInTheDocument();
+    expect(screen.getByText('用户中心')).toBeInTheDocument();
+  });
+
+  it('should display existing rooms', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+    const room: Room = {
+      id: '1',
+      name: 'Test Room',
+      password: '123456',
+      createdAt: Date.now(),
+      users: ['1'],
+    };
+    vi.mocked(api.getRooms).mockResolvedValue([room]);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Room')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('👥 1 人')).toBeInTheDocument();
+    expect(screen.getByText('🔒 需要密码')).toBeInTheDocument();
+  });
+
+  it('should open create room modal', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('创建房间')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('创建房间'));
+
+    expect(screen.getByText('房间名称')).toBeInTheDocument();
+    expect(screen.getByText('房间密码')).toBeInTheDocument();
+  });
+
+  it('should create new room', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+    const newRoom: Room = {
+      id: '2',
+      name: 'New Room',
+      password: 'password123',
+      createdAt: Date.now(),
+      users: ['1'],
+    };
+    vi.mocked(api.createRoom).mockResolvedValue(newRoom);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('创建房间')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('创建房间'));
+
+    const nameInput = screen.getByLabelText('房间名称');
+    const passwordInput = screen.getByLabelText('房间密码');
+
+    fireEvent.change(nameInput, { target: { value: 'New Room' } });
+    fireEvent.change(passwordInput, { target: { value: 'password123' } });
+
+    const form = nameInput.closest('form');
+    fireEvent.submit(form!);
+
+    await waitFor(() => {
+      expect(api.createRoom).toHaveBeenCalledWith('New Room', 'password123', '1');
+      expect(mockPush).toHaveBeenCalledWith('/room/2');
+    });
+  });
+
+  it('should open join room modal', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+    const room: Room = {
+      id: '1',
+      name: 'Test Room',
+      password: '123456',
+      createdAt: Date.now(),
+      users: ['2'],
+    };
+    vi.mocked(api.getRooms).mockResolvedValue([room]);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Room')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Test Room'));
+
+    expect(screen.getByText('加入房间')).toBeInTheDocument();
+    expect(screen.getByText('房间: Test Room')).toBeInTheDocument();
+  });
+
+  it('should join room with correct password', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+    const room: Room = {
+      id: '1',
+      name: 'Test Room',
+      password: '123456',
+      createdAt: Date.now(),
+      users: ['2'],
+    };
+    vi.mocked(api.getRooms).mockResolvedValue([room]);
+    vi.mocked(api.joinRoom).mockResolvedValue({} as any);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Room')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Test Room'));
+
+    const passwordInput = screen.getByLabelText('房间密码');
+    fireEvent.change(passwordInput, { target: { value: '123456' } });
+
+    const joinButton = screen.getAllByText('加入')[0];
+    fireEvent.click(joinButton);
+
+    await waitFor(() => {
+      expect(api.joinRoom).toHaveBeenCalledWith('1', '1', '123456');
+      expect(mockPush).toHaveBeenCalledWith('/room/1');
+    });
+  });
+
+  it('should not join room with incorrect password', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+    const room: Room = {
+      id: '1',
+      name: 'Test Room',
+      password: '123456',
+      createdAt: Date.now(),
+      users: ['2'],
+    };
+    vi.mocked(api.getRooms).mockResolvedValue([room]);
+    vi.mocked(api.joinRoom).mockRejectedValue(new Error('密码错误'));
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Room')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Test Room'));
+
+    const passwordInput = screen.getByLabelText('房间密码');
+    fireEvent.change(passwordInput, { target: { value: 'wrong' } });
+
+    const joinButton = screen.getAllByText('加入')[0];
+    fireEvent.click(joinButton);
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('密码错误');
+    });
+
+    expect(mockPush).not.toHaveBeenCalledWith('/room/1');
+    alertSpy.mockRestore();
+  });
+
+  it('should navigate to profile page', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('用户中心')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('用户中心'));
+
+    expect(mockPush).toHaveBeenCalledWith('/profile');
+  });
+});
