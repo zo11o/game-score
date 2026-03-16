@@ -17,13 +17,6 @@ export async function POST(
     const { id } = await params;
     const { password } = await request.json();
 
-    if (!password) {
-      return NextResponse.json(
-        { error: '密码不能为空' },
-        { status: 400 }
-      );
-    }
-
     const room = await prisma.room.findUnique({
       where: { id },
       include: { members: true },
@@ -37,13 +30,20 @@ export async function POST(
       return NextResponse.json({ error: '房间已结束，无法加入' }, { status: 400 });
     }
 
-    if (room.password !== password) {
-      return NextResponse.json({ error: '密码错误' }, { status: 400 });
-    }
-
     const alreadyJoined = room.members.some((m) => m.userId === session.user.id);
     if (alreadyJoined) {
       return NextResponse.json({ joined: true });
+    }
+
+    if (!password) {
+      return NextResponse.json(
+        { error: '密码不能为空' },
+        { status: 400 }
+      );
+    }
+
+    if (room.password !== password) {
+      return NextResponse.json({ error: '密码错误' }, { status: 400 });
     }
 
     const systemUser = await getOrCreateSystemUser();

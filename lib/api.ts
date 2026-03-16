@@ -94,7 +94,7 @@ export const api = {
     return handleResponse<RoomDetailsResponse>(await fetch(`/api/rooms/${roomId}`));
   },
 
-  async joinRoom(roomId: string, password: string) {
+  async joinRoom(roomId: string, password?: string) {
     return handleResponse(
       await fetch(`/api/rooms/${roomId}/join`, {
         method: 'POST',

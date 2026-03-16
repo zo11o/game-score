@@ -84,7 +84,7 @@ describe('Home Page (Game Lobby)', () => {
 
   it('should display existing rooms', async () => {
     vi.mocked(getCurrentUser).mockReturnValue(mockUser);
-    const room = buildRoom();
+    const room = buildRoom({ users: ['2'] });
     vi.mocked(api.getRooms).mockResolvedValue([room]);
 
     render(<Home />);
@@ -95,6 +95,38 @@ describe('Home Page (Game Lobby)', () => {
 
     expect(screen.getByText('👥 1 人')).toBeInTheDocument();
     expect(screen.getByText('🔒 需要密码')).toBeInTheDocument();
+  });
+
+  it('should let an existing room member enter without password', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+    const room = buildRoom({ users: ['1', '2'] });
+    vi.mocked(api.getRooms).mockResolvedValue([room]);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Room')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Test Room'));
+
+    expect(mockPush).toHaveBeenCalledWith('/room/1');
+    expect(screen.queryByText('加入房间')).not.toBeInTheDocument();
+    expect(api.joinRoom).not.toHaveBeenCalled();
+  });
+
+  it('should show direct entry hint for rooms the current user already joined', async () => {
+    vi.mocked(getCurrentUser).mockReturnValue(mockUser);
+    const room = buildRoom({ users: ['1', '2'] });
+    vi.mocked(api.getRooms).mockResolvedValue([room]);
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Room')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('✅ 已加入，可直接进入')).toBeInTheDocument();
   });
 
   it('should open create room modal', async () => {

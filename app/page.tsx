@@ -114,6 +114,18 @@ export default function Home() {
     }
   };
 
+  const handleRoomSelect = (room: Room) => {
+    const alreadyJoined = !!currentUser && room.users.includes(currentUser.id);
+
+    if (alreadyJoined) {
+      router.push(`/room/${room.id}`);
+      return;
+    }
+
+    setSelectedRoom(room);
+    joinRoomModal.onOpen();
+  };
+
   if (!currentUser) return null;
 
   if (loading) {
@@ -181,10 +193,7 @@ export default function Home() {
             <div
               key={room.id}
               className="relative bg-slate-800/50 backdrop-blur-sm border border-purple-500/30 rounded-xl p-6 hover:border-purple-500 transition-all cursor-pointer scanlines"
-              onClick={() => {
-                setSelectedRoom(room);
-                joinRoomModal.onOpen();
-              }}
+              onClick={() => handleRoomSelect(room)}
             >
               <div className="flex items-center gap-2 mb-2">
                 <span className="px-2 py-1 text-xs font-bold bg-purple-500/20 text-purple-300 rounded border border-purple-500/30">
@@ -198,7 +207,9 @@ export default function Home() {
               <p className="text-sm text-slate-400 mb-2">创建者: {room.creatorName}</p>
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <span>👥 {room.users.length} 人</span>
-                <span>🔒 需要密码</span>
+                <span>
+                  {currentUser && room.users.includes(currentUser.id) ? '✅ 已加入，可直接进入' : '🔒 需要密码'}
+                </span>
               </div>
             </div>
           ))}

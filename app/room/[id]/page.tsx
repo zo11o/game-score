@@ -299,6 +299,7 @@ function HandStrip({
   onDraw,
   onCardPress,
   isTogglingCard,
+  showInteractionHint = true,
 }: {
   currentRound: CurrentRound | null;
   hand: RoundHand | null;
@@ -309,6 +310,7 @@ function HandStrip({
   onDraw: () => void;
   onCardPress: (card: PlayingCard) => void;
   isTogglingCard: boolean;
+  showInteractionHint?: boolean;
 }) {
   if (!currentRound) {
     return <p className="text-[11px] text-slate-500 mt-3 text-center">本轮未发牌</p>;
@@ -328,7 +330,7 @@ function HandStrip({
   return (
     <div className="mt-3 w-full">
       <p className="text-[11px] text-slate-400 text-center mb-2">本轮手牌</p>
-      {isSelf && visibleCount > 0 && (
+      {isSelf && visibleCount > 0 && showInteractionHint && (
         <p className="mb-2 text-[10px] text-center text-amber-300/80">
           双击卡牌可亮牌或扣回
         </p>
@@ -532,6 +534,13 @@ export default function RoomPage() {
 
   const isOwner = !!room && !!currentUser && room.creatorId === currentUser.id;
   const isPokerRoom = room?.gameType === 'poker_rounds';
+  const roomModalClassNames = {
+    wrapper: 'px-3 sm:px-6',
+    base: 'w-full max-w-[calc(100vw-1.5rem)] bg-slate-800 border border-purple-500/50 sm:max-w-md',
+    header: 'border-b border-default-200 px-4 py-4 sm:px-6',
+    body: 'px-4 py-5 sm:px-6 sm:py-6',
+    footer: 'flex-col-reverse gap-2 border-t border-default-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-6',
+  } as const;
   const orderedUsers = useMemo(() => {
     if (!currentUser) {
       return users;
@@ -549,6 +558,12 @@ export default function RoomPage() {
       return 0;
     });
   }, [currentUser, users]);
+  const featuredUser = currentUser
+    ? orderedUsers.find((user) => user.id === currentUser.id) ?? null
+    : null;
+  const otherUsers = currentUser
+    ? orderedUsers.filter((user) => user.id !== currentUser.id)
+    : orderedUsers;
   const currentUserHand = useMemo(
     () => (currentUser ? getHandForUser(currentRound, currentUser.id) : null),
     [currentRound, currentUser]
@@ -724,6 +739,121 @@ export default function RoomPage() {
 
   if (!room) return null;
 
+  const renderUserCard = (user: User, options?: { featured?: boolean }) => {
+    const featured = options?.featured ?? false;
+    const hand = getHandForUser(currentRound, user.id);
+    const isSelf = user.id === currentUser.id;
+
+    return (
+      <div
+        key={user.id}
+        ref={setPlayerAreaRef(user.id)}
+        className={featured ? 'relative w-full' : 'relative min-w-[280px] flex-1'}
+      >
+        <Card
+          isPressable={room.status === 'active' && user.id !== currentUser.id}
+          aria-label={isSelf ? `${user.name} 当前分数` : `给 ${user.name} 打分`}
+          onClick={() =>
+            room.status === 'active' && user.id !== currentUser.id && setSelectedUser(user)
+          }
+          onPress={() =>
+            room.status === 'active' && user.id !== currentUser.id && setSelectedUser(user)
+          }
+          className={
+            featured
+              ? 'relative w-full bg-slate-800/60 border border-secondary/40 shadow-[0_18px_45px_rgba(31,41,55,0.35)]'
+              : 'relative w-full bg-slate-800/50 border border-purple-500/30 hover:border-purple-500'
+          }
+        >
+          <CardBody
+            className={
+              featured
+                ? 'flex flex-col gap-4 p-4 sm:p-5'
+                : 'flex flex-col gap-3 p-4 sm:p-5'
+            }
+          >
+            <div
+              className={
+                featured
+                  ? 'flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-secondary/25 bg-slate-950/25 p-4'
+                  : 'flex w-full items-center gap-3 rounded-2xl border border-purple-500/20 bg-slate-950/20 p-3'
+              }
+            >
+              <div className={featured ? 'flex min-w-0 items-center gap-3' : 'flex min-w-0 flex-1 items-center gap-3'}>
+                <div
+                  className={
+                    featured
+                      ? 'h-16 w-16 sm:h-20 sm:w-20 rounded-full overflow-hidden border-4 border-secondary shrink-0'
+                      : 'h-14 w-14 sm:h-16 sm:w-16 rounded-full overflow-hidden border-4 border-purple-500 shrink-0'
+                  }
+                >
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <div className={featured ? 'min-w-0' : 'min-w-0 flex-1'}>
+                  <div className="flex items-center gap-2">
+                    <h3
+                      className={
+                        featured
+                          ? 'truncate text-lg font-bold text-secondary-300 sm:text-2xl'
+                          : 'truncate text-base font-bold text-purple-300 sm:text-lg'
+                      }
+                    >
+                      {user.name}
+                    </h3>
+                    {isSelf && <Chip size="sm" color="secondary">你</Chip>}
+                  </div>
+                  <p className={featured ? 'mt-1 text-xs text-slate-400 sm:text-sm' : 'mt-0.5 text-[11px] text-slate-400 sm:text-xs'}>
+                    {isSelf ? '当前玩家' : '房间成员'}
+                  </p>
+                  {isPokerRoom && featured && (
+                    <p className="mt-2 text-[11px] text-amber-300/80 sm:text-xs">
+                      双击卡牌可亮牌或扣回
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div
+                className={
+                  featured
+                    ? 'ml-auto shrink-0 rounded-2xl bg-slate-900/70 px-4 py-3 text-center sm:min-w-[132px]'
+                    : 'shrink-0 rounded-xl bg-slate-900/70 px-3 py-2 text-center min-w-[88px]'
+                }
+              >
+                <div className={featured ? 'text-3xl font-bold text-pink-400 sm:text-4xl' : 'text-2xl font-bold text-pink-400'}>
+                  {scores[user.id] || 0}
+                </div>
+                <p className={featured ? 'mt-1 text-xs text-slate-400 sm:text-sm' : 'mt-0.5 text-[11px] text-slate-400'}>
+                  分数
+                </p>
+              </div>
+            </div>
+            {isPokerRoom && (
+              <div className={featured ? 'mt-2 w-full max-w-3xl' : 'w-full'}>
+                <HandStrip
+                  currentRound={currentRound}
+                  hand={hand}
+                  isSelf={isSelf}
+                  showDrawButton={isSelf && showDrawButton}
+                  canDraw={isSelf && canDraw}
+                  isDrawing={isSelf && drawInteractionLocked}
+                  onDraw={handleDrawCard}
+                  onCardPress={handleToggleCardVisibility}
+                  isTogglingCard={isSelf && isTogglingCard}
+                  showInteractionHint={!featured}
+                />
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 sm:p-6">
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 max-w-7xl mx-auto">
@@ -802,64 +932,17 @@ export default function RoomPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-            {orderedUsers.map((user) => {
-              const hand = getHandForUser(currentRound, user.id);
-              const isSelf = user.id === currentUser.id;
+          {featuredUser && (
+            <div className="mb-4 sm:mb-6">
+              {renderUserCard(featuredUser, { featured: true })}
+            </div>
+          )}
 
-              return (
-                <div key={user.id} ref={setPlayerAreaRef(user.id)} className="relative">
-                  <Card
-                    isPressable={room.status === 'active' && user.id !== currentUser.id}
-                    aria-label={isSelf ? `${user.name} 当前分数` : `给 ${user.name} 打分`}
-                    onClick={() =>
-                      room.status === 'active' && user.id !== currentUser.id && setSelectedUser(user)
-                    }
-                    onPress={() =>
-                      room.status === 'active' && user.id !== currentUser.id && setSelectedUser(user)
-                    }
-                    className="relative bg-slate-800/50 border border-purple-500/30 hover:border-purple-500"
-                  >
-                    <CardBody className="flex flex-col items-center p-4 sm:p-6">
-                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-4 border-purple-500 mb-3 sm:mb-4 shrink-0">
-                        <img
-                          src={user.avatar}
-                          alt={user.name}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-                      <h3 className="text-base sm:text-lg font-bold text-purple-300 mb-1 sm:mb-2 truncate max-w-full">
-                        {user.name}
-                      </h3>
-                      <div className="text-2xl sm:text-3xl font-bold text-pink-400">
-                        {scores[user.id] || 0}
-                      </div>
-                      <p className="text-xs sm:text-sm text-slate-400 mt-1">分数</p>
-                      {isSelf && (
-                        <Chip size="sm" color="secondary" className="absolute top-2 right-2">
-                          你
-                        </Chip>
-                      )}
-                      {isPokerRoom && (
-                        <HandStrip
-                          currentRound={currentRound}
-                          hand={hand}
-                          isSelf={isSelf}
-                          showDrawButton={isSelf && showDrawButton}
-                          canDraw={isSelf && canDraw}
-                          isDrawing={isSelf && drawInteractionLocked}
-                          onDraw={handleDrawCard}
-                          onCardPress={handleToggleCardVisibility}
-                          isTogglingCard={isSelf && isTogglingCard}
-                        />
-                      )}
-                    </CardBody>
-                  </Card>
-                </div>
-              );
-            })}
-          </div>
+          {otherUsers.length > 0 && (
+            <div className="flex flex-wrap gap-4 sm:gap-6">
+              {otherUsers.map((user) => renderUserCard(user))}
+            </div>
+          )}
 
           <Modal
             isOpen={!!selectedUser}
@@ -867,12 +950,7 @@ export default function RoomPage() {
             placement="center"
             size="md"
             scrollBehavior="inside"
-            classNames={{
-              base: 'bg-slate-800 border border-purple-500/50',
-              header: 'border-b border-default-200',
-              body: 'py-6',
-              footer: 'border-t border-default-200',
-            }}
+            classNames={roomModalClassNames}
           >
             <ModalContent>
               {selectedUser && (
@@ -881,7 +959,7 @@ export default function RoomPage() {
                     给 {selectedUser.name} 打分
                   </ModalHeader>
                   <ModalBody>
-                    <div className="flex items-center justify-center gap-4 mb-6">
+                    <div className="mb-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
                       <div className="w-16 h-16 rounded-full overflow-hidden border-4 border-purple-500 shrink-0">
                         <img
                           src={selectedUser.avatar}
@@ -914,14 +992,14 @@ export default function RoomPage() {
                         setSelectedUser(null);
                         setPoints(1);
                       }}
-                      className="whitespace-nowrap"
+                      className="w-full whitespace-nowrap sm:w-auto"
                     >
                       取消
                     </Button>
                     <Button
                       color="secondary"
                       onPress={handleGiveScore}
-                      className="whitespace-nowrap"
+                      className="w-full whitespace-nowrap sm:w-auto"
                     >
                       确认
                     </Button>
@@ -937,10 +1015,8 @@ export default function RoomPage() {
             placement="center"
             scrollBehavior="inside"
             classNames={{
-              base: 'bg-slate-800 border border-purple-500/50',
-              header: 'border-b border-default-200',
-              body: 'py-6',
-              footer: 'border-t border-default-200',
+              ...roomModalClassNames,
+              base: 'w-full max-w-[calc(100vw-1.5rem)] bg-slate-800 border border-purple-500/50 sm:max-w-2xl',
             }}
           >
             <ModalContent>
@@ -955,7 +1031,7 @@ export default function RoomPage() {
                   {orderedUsers.map((user) => (
                     <div
                       key={user.id}
-                      className="flex items-center gap-3 rounded-xl border border-purple-500/20 bg-slate-900/60 p-3"
+                      className="flex flex-col gap-3 rounded-xl border border-purple-500/20 bg-slate-900/60 p-3 sm:flex-row sm:items-center"
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="h-10 w-10 overflow-hidden rounded-full border-2 border-purple-500/40">
@@ -996,10 +1072,10 @@ export default function RoomPage() {
                 </div>
               </ModalBody>
               <ModalFooter>
-                <Button variant="light" onPress={dealRoundModal.onClose} className="whitespace-nowrap">
+                <Button variant="light" onPress={dealRoundModal.onClose} className="w-full whitespace-nowrap sm:w-auto">
                   取消
                 </Button>
-                <Button color="secondary" onPress={handleDealRound} className="whitespace-nowrap">
+                <Button color="secondary" onPress={handleDealRound} className="w-full whitespace-nowrap sm:w-auto">
                   确认发牌
                 </Button>
               </ModalFooter>
