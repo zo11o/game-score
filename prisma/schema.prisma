@@ -16,18 +16,68 @@ model User {
   createdAt    DateTime @default(now())
 
   roomMemberships RoomMember[]
-  scoresGiven    Score[] @relation("ScoresFrom")
-  scoresReceived Score[] @relation("ScoresTo")
+  createdRooms    Room[]   @relation("CreatedRooms")
+  sessions        Session[]
+  scoresGiven     Score[]  @relation("ScoresFrom")
+  scoresReceived  Score[]  @relation("ScoresTo")
+  roundsStarted   RoomRound[]
+  dealtCards      RoomRoundCard[]
 }
 
 model Room {
-  id        String   @id @default(cuid())
-  name      String
-  password  String
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  name           String
+  password       String
+  status         String   @default("active") // active, finished
+  roomNumber     Int      @unique
+  creatorId      String
+  gameType       String   @default("classic")
+  createdAt      DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+  currentRoundNumber Int?
 
+  creator User         @relation("CreatedRooms", fields: [creatorId], references: [id], onDelete: Cascade)
   members RoomMember[]
   scores  Score[]
+  rounds  RoomRound[]
+}
+
+model Session {
+  token     String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RoomRound {
+  id              String   @id @default(cuid())
+  roomId          String
+  roundNumber     Int
+  startedByUserId String
+  remainingDeckJson String @default("[]")
+  participantUserIdsJson String @default("[]")
+  createdAt       DateTime @default(now())
+
+  room          Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  startedByUser User            @relation(fields: [startedByUserId], references: [id], onDelete: Cascade)
+  cards         RoomRoundCard[]
+
+  @@unique([roomId, roundNumber])
+}
+
+model RoomRoundCard {
+  id        String @id @default(cuid())
+  roundId   String
+  userId    String
+  cardCode  String
+  dealtOrder Int
+
+  round RoomRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, cardCode])
 }
 
 model RoomMember {

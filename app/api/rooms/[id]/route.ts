@@ -1,24 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { serializeCard } from '@/lib/cards';
 import { prisma } from '@/lib/prisma';
+import { parseStringArrayJson } from '@/lib/round-state';
+import { serializeRoom } from '@/lib/room-response';
+import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
+import { SYSTEM_EMAIL } from '@/lib/system-user';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getAuthenticatedSession(request);
+    if (!session) {
+      return unauthorizedResponse();
+    }
+
     const { id } = await params;
 
     const room = await prisma.room.findUnique({
       where: { id },
       include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         members: {
-          include: { user: true },
+          orderBy: { id: 'asc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+              },
+            },
+          },
         },
       },
     });
 
     if (!room) {
       return NextResponse.json({ error: '房间不存在' }, { status: 404 });
+    }
+
+    const isMember = room.members.some((member) => member.userId === session.user.id);
+    if (!isMember) {
+      return NextResponse.json(
+        { error: '你还不是该房间成员' },
+        { status: 403 }
+      );
     }
 
     const scoreRecords = await prisma.score.findMany({
@@ -40,7 +74,7 @@ export async function GET(
     const records = scoreRecords.map((s) => ({
       id: s.id,
       fromUserId: s.fromUserId,
-      fromName: s.from.email === 'system@game-score.local' ? '系统' : s.from.name,
+      fromName: s.from.email === SYSTEM_EMAIL ? '系统' : s.from.name,
       fromAvatar: s.from.avatar,
       toUserId: s.toUserId,
       toName: s.to.name,
@@ -49,14 +83,55 @@ export async function GET(
       timestamp: s.timestamp.getTime(),
     }));
 
+    let currentRound = null;
+    if (room.gameType === 'poker_rounds' && room.currentRoundNumber !== null) {
+      const round = await prisma.roomRound.findUnique({
+        where: {
+          roomId_roundNumber: {
+            roomId: room.id,
+            roundNumber: room.currentRoundNumber,
+          },
+        },
+        include: {
+          cards: {
+            orderBy: { dealtOrder: 'asc' },
+          },
+        },
+      });
+
+      if (round) {
+        const participantIds = new Set(parseStringArrayJson(round.participantUserIdsJson));
+        const remainingDeck = parseStringArrayJson(round.remainingDeckJson);
+        const cardsByUser = new Map<string, string[]>();
+        room.members.forEach((member) => {
+          cardsByUser.set(member.userId, []);
+        });
+
+        round.cards.forEach((card) => {
+          const userCards = cardsByUser.get(card.userId) ?? [];
+          userCards.push(card.cardCode);
+          cardsByUser.set(card.userId, userCards);
+        });
+
+        currentRound = {
+          roundNumber: round.roundNumber,
+          dealtAt: round.createdAt.getTime(),
+          remainingCardCount: remainingDeck.length,
+          hands: room.members.map((member) => {
+            const cardCodes = cardsByUser.get(member.userId) ?? [];
+            return {
+              userId: member.userId,
+              visibleCards: member.userId === session.user.id ? cardCodes.map(serializeCard) : [],
+              hiddenCount: cardCodes.length,
+              isParticipant: participantIds.has(member.userId),
+            };
+          }),
+        };
+      }
+    }
+
     return NextResponse.json({
-      room: {
-        id: room.id,
-        name: room.name,
-        password: room.password,
-        createdAt: room.createdAt.getTime(),
-        users: room.members.map((m) => m.userId),
-      },
+      room: serializeRoom(room, room.creator, room.members.map((member) => member.userId)),
       users: room.members.map((m) => ({
         id: m.user.id,
         email: m.user.email,
@@ -65,6 +140,7 @@ export async function GET(
       })),
       scores: userScores,
       records,
+      currentRound,
     });
   } catch (err) {
     console.error('Get room error:', err);

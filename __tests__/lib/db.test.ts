@@ -21,7 +21,14 @@ describe('Types', () => {
       id: '1',
       name: 'Test Room',
       password: '123456',
+      status: 'active',
+      roomNumber: 1001,
+      creatorId: 'user1',
+      creatorName: 'Test User',
+      gameType: 'classic',
       createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      currentRoundNumber: null,
       users: ['user1'],
     };
     expect(room.id).toBe('1');

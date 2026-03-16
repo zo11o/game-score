@@ -1,24 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateSystemUser, INITIAL_SCORE } from '@/lib/system-user';
+import { serializeRoom } from '@/lib/room-response';
+import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
 
-export async function GET() {
+const VALID_GAME_TYPES = new Set(['classic', 'poker_rounds']);
+
+export async function GET(request: NextRequest) {
   try {
+    const session = await getAuthenticatedSession(request);
+    if (!session) {
+      return unauthorizedResponse();
+    }
+
+    // 自动将 24 小时无活动的房间标记为已结束
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await prisma.room.updateMany({
+      where: {
+        status: 'active',
+        lastActivityAt: {
+          lt: twentyFourHoursAgo,
+        },
+      },
+      data: {
+        status: 'finished',
+      },
+    });
+
+    // 只返回进行中的房间
     const rooms = await prisma.room.findMany({
+      where: {
+        status: 'active',
+      },
       include: {
         members: true,
+        creator: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     return NextResponse.json(
-      rooms.map((r) => ({
-        id: r.id,
-        name: r.name,
-        password: r.password,
-        createdAt: r.createdAt.getTime(),
-        users: r.members.map((m) => m.userId),
-      }))
+      rooms.map((room) =>
+        serializeRoom(room, room.creator, room.members.map((member) => member.userId))
+      )
     );
   } catch (err) {
     console.error('Get rooms error:', err);
@@ -31,21 +60,53 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, password, userId } = await request.json();
+    const session = await getAuthenticatedSession(request);
+    if (!session) {
+      return unauthorizedResponse();
+    }
 
-    if (!name || !password || !userId) {
+    const { name, password, gameType } = await request.json();
+
+    if (!name || !password) {
       return NextResponse.json(
-        { error: '房间名称、密码和用户ID不能为空' },
+        { error: '房间名称和密码不能为空' },
         { status: 400 }
       );
     }
+
+    if (gameType && !VALID_GAME_TYPES.has(gameType)) {
+      return NextResponse.json(
+        { error: '不支持的游戏类型' },
+        { status: 400 }
+      );
+    }
+
+    // Get the next room number
+    const lastRoom = await prisma.room.findFirst({
+      orderBy: { roomNumber: 'desc' },
+      select: { roomNumber: true },
+    });
+    const nextRoomNumber = (lastRoom?.roomNumber || 0) + 1;
 
     const room = await prisma.room.create({
       data: {
         name,
         password,
+        status: 'active',
+        roomNumber: nextRoomNumber,
+        creatorId: session.user.id,
+        gameType: gameType ?? 'classic',
+        lastActivityAt: new Date(),
         members: {
-          create: { userId },
+          create: { userId: session.user.id },
+        },
+      },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
     });
@@ -55,19 +116,13 @@ export async function POST(request: NextRequest) {
       data: {
         roomId: room.id,
         fromUserId: systemUser.id,
-        toUserId: userId,
+        toUserId: session.user.id,
         points: INITIAL_SCORE,
       },
     });
 
     return NextResponse.json({
-      room: {
-        id: room.id,
-        name: room.name,
-        password: room.password,
-        createdAt: room.createdAt.getTime(),
-        users: [userId],
-      },
+      room: serializeRoom(room, room.creator, [session.user.id]),
     });
   } catch (err) {
     console.error('Create room error:', err);

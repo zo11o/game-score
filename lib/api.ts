@@ -1,6 +1,13 @@
 'use client';
 
-import type { User, Room, ScoreRecord } from './types';
+import type {
+  DealAllocation,
+  ParticipationHistory,
+  Room,
+  RoomDetailsResponse,
+  ScoreRecord,
+  User,
+} from './types';
 
 const USER_KEY = 'game_score_user';
 
@@ -20,10 +27,27 @@ export function setCurrentUser(user: User | null): void {
   }
 }
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+export function isUnauthorizedError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 401;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || '请求失败');
+    if (res.status === 401) {
+      setCurrentUser(null);
+    }
+    throw new ApiError(data.error || '请求失败', res.status);
   }
   return data as T;
 }
@@ -55,42 +79,78 @@ export const api = {
     return handleResponse(await fetch('/api/rooms'));
   },
 
-  async createRoom(name: string, password: string, userId: string) {
+  async createRoom(name: string, password: string, gameType: Room['gameType']) {
     const data = await handleResponse<{ room: Room }>(
       await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, password, userId }),
+        body: JSON.stringify({ name, password, gameType }),
       })
     );
     return data.room;
   },
 
   async getRoom(roomId: string) {
-    return handleResponse<{
-      room: Room;
-      users: User[];
-      scores: Record<string, number>;
-      records: ScoreRecord[];
-    }>(await fetch(`/api/rooms/${roomId}`));
+    return handleResponse<RoomDetailsResponse>(await fetch(`/api/rooms/${roomId}`));
   },
 
-  async joinRoom(roomId: string, userId: string, password: string) {
+  async joinRoom(roomId: string, password: string) {
     return handleResponse(
       await fetch(`/api/rooms/${roomId}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, password }),
+        body: JSON.stringify({ password }),
       })
     );
   },
 
-  async addScore(roomId: string, fromUserId: string, toUserId: string, points: number) {
+  async addScore(roomId: string, toUserId: string, points: number) {
     return handleResponse(
       await fetch('/api/scores', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, fromUserId, toUserId, points }),
+        body: JSON.stringify({ roomId, toUserId, points }),
+      })
+    );
+  },
+
+  async finishRoom(roomId: string) {
+    return handleResponse(
+      await fetch(`/api/rooms/${roomId}/finish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+  },
+
+  async dealRound(roomId: string, allocations: DealAllocation[]) {
+    return handleResponse(
+      await fetch(`/api/rooms/${roomId}/rounds`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allocations }),
+      })
+    );
+  },
+
+  async drawCard(roomId: string) {
+    return handleResponse<{ success: true; drawId: string; roundNumber: number }>(
+      await fetch(`/api/rooms/${roomId}/rounds/draw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+  },
+
+  async getUserHistory(userId: string): Promise<ParticipationHistory[]> {
+    return handleResponse(await fetch(`/api/users/${userId}/history`));
+  },
+
+  async logout() {
+    return handleResponse(
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       })
     );
   },

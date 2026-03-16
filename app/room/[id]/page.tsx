@@ -1,8 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api, getCurrentUser } from '@/lib/api';
-import type { Room, User, ScoreRecord } from '@/lib/types';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api, getCurrentUser, isUnauthorizedError } from '@/lib/api';
+import { useRoomSocket } from '@/lib/use-room-socket';
+import type {
+  CurrentRound,
+  DealAllocation,
+  PlayingCard,
+  Room,
+  RoomDetailsResponse,
+  RoomDrawEvent,
+  RoundHand,
+  User,
+  ScoreRecord,
+} from '@/lib/types';
 import { useRouter, useParams } from 'next/navigation';
 import {
   Button,
@@ -21,7 +33,27 @@ import {
   DrawerBody,
   DrawerFooter,
   Chip,
+  Spinner,
 } from '@heroui/react';
+
+const GAME_TYPE_LABELS: Record<Room['gameType'], string> = {
+  classic: '经典记分',
+  poker_rounds: '扑克轮次',
+};
+
+const DRAW_CARD_WIDTH = 44;
+const DRAW_CARD_HEIGHT = 64;
+
+type AnimatedDraw = RoomDrawEvent & {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+};
+
+function getHandForUser(currentRound: CurrentRound | null, userId: string): RoundHand | null {
+  return currentRound?.hands.find((item) => item.userId === userId) ?? null;
+}
 
 function RecordsPanel({
   records,
@@ -64,19 +96,180 @@ function RecordsPanel({
   );
 }
 
+function CardFace({ card }: { card: PlayingCard }) {
+  const colorClass =
+    card.color === 'red'
+      ? 'text-rose-400'
+      : card.color === 'black'
+        ? 'text-slate-100'
+        : 'text-amber-300';
+
+  return (
+    <div className="w-11 h-16 rounded-lg border border-purple-500/30 bg-slate-950/90 shadow-sm flex flex-col items-center justify-center">
+      <span className={`text-[11px] font-bold leading-none ${colorClass}`}>{card.rank}</span>
+      <span className={`text-base font-bold leading-none ${colorClass}`}>{card.label.slice(-1)}</span>
+    </div>
+  );
+}
+
+function CardBack({ className = '' }: { className?: string }) {
+  return (
+    <div
+      className={`w-11 h-16 rounded-lg border border-pink-500/40 bg-gradient-to-br from-purple-700 via-slate-900 to-pink-600 shadow-sm flex items-center justify-center text-pink-100 text-xs font-bold ${className}`}
+    >
+      ?
+    </div>
+  );
+}
+
+function HandStrip({
+  currentRound,
+  hand,
+  isSelf,
+  showDrawButton,
+  canDraw,
+  isDrawing,
+  onDraw,
+}: {
+  currentRound: CurrentRound | null;
+  hand: RoundHand | null;
+  isSelf: boolean;
+  showDrawButton: boolean;
+  canDraw: boolean;
+  isDrawing: boolean;
+  onDraw: () => void;
+}) {
+  if (!currentRound) {
+    return <p className="text-[11px] text-slate-500 mt-3 text-center">本轮未发牌</p>;
+  }
+
+  if (!hand?.isParticipant) {
+    return <p className="text-[11px] text-slate-500 mt-3 text-center">本轮未参与</p>;
+  }
+
+  const visibleCount = hand.visibleCards.length;
+  const hiddenCount = hand.hiddenCount;
+  const hasCards = visibleCount > 0 || hiddenCount > 0;
+
+  return (
+    <div className="mt-3 w-full">
+      <p className="text-[11px] text-slate-400 text-center mb-2">本轮手牌</p>
+      {hasCards ? (
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {visibleCount > 0
+            ? hand.visibleCards.map((card) => <CardFace key={card.code} card={card} />)
+            : Array.from({ length: hiddenCount }, (_, index) => (
+                <CardBack key={`${hand.userId}-hidden-${index}`} />
+              ))}
+        </div>
+      ) : (
+        <p className="text-[11px] text-slate-500 text-center">当前无手牌</p>
+      )}
+
+      {isSelf && showDrawButton && (
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <Button
+            size="sm"
+            color="warning"
+            variant="flat"
+            onPress={onDraw}
+            isDisabled={!canDraw}
+            isLoading={isDrawing}
+            className="whitespace-nowrap"
+          >
+            {currentRound.remainingCardCount > 0 ? '抽一张' : '牌堆已空'}
+          </Button>
+          <p className="text-[11px] text-slate-500">
+            本轮剩余牌堆 {currentRound.remainingCardCount} 张
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RoomPage() {
   const [room, setRoom] = useState<Room | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [records, setRecords] = useState<ScoreRecord[]>([]);
+  const [currentRound, setCurrentRound] = useState<CurrentRound | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [points, setPoints] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [isDrawingCard, setIsDrawingCard] = useState(false);
+  const [allocations, setAllocations] = useState<Record<string, string>>({});
+  const [pendingDraws, setPendingDraws] = useState<RoomDrawEvent[]>([]);
+  const [activeDraw, setActiveDraw] = useState<AnimatedDraw | null>(null);
+  const deckRef = useRef<HTMLDivElement | null>(null);
+  const playerAreaRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const queuedRoomDataRef = useRef<RoomDetailsResponse | null>(null);
+  const hasPendingAnimationRef = useRef(false);
   const recordsDrawer = useDisclosure();
+  const dealRoundModal = useDisclosure();
   const router = useRouter();
   const params = useParams();
   const roomId = params.id as string;
+
+  const setPlayerAreaRef = useCallback(
+    (userId: string) => (node: HTMLDivElement | null) => {
+      playerAreaRefs.current[userId] = node;
+    },
+    []
+  );
+
+  const applyRoomData = useCallback((data: RoomDetailsResponse) => {
+    setRoom(data.room);
+    setUsers(data.users);
+    setScores(data.scores);
+    setRecords(data.records ?? []);
+    setCurrentRound(data.currentRound ?? null);
+    setIsDrawingCard(false);
+  }, []);
+
+  const flushQueuedRoomData = useCallback(() => {
+    const queuedRoomData = queuedRoomDataRef.current;
+    queuedRoomDataRef.current = null;
+
+    if (queuedRoomData) {
+      applyRoomData(queuedRoomData);
+      return;
+    }
+
+    setIsDrawingCard(false);
+  }, [applyRoomData]);
+
+  const fetchRoom = useCallback(() => {
+    return api
+      .getRoom(roomId)
+      .then((data) => {
+        if (hasPendingAnimationRef.current) {
+          queuedRoomDataRef.current = data;
+          return;
+        }
+        applyRoomData(data);
+      })
+      .catch((err) => {
+        if (isUnauthorizedError(err)) {
+          router.push('/login');
+          return;
+        }
+        router.push('/');
+      });
+  }, [applyRoomData, roomId, router]);
+
+  const handleRoomDraw = useCallback(
+    (event: RoomDrawEvent) => {
+      if (event.roomId !== roomId) {
+        return;
+      }
+
+      hasPendingAnimationRef.current = true;
+      setPendingDraws((prev) => [...prev, event]);
+    },
+    [roomId]
+  );
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -85,24 +278,103 @@ export default function RoomPage() {
       return;
     }
     setCurrentUser(user);
+    fetchRoom().finally(() => setLoading(false));
+  }, [fetchRoom, router]);
 
-    api
-      .getRoom(roomId)
-      .then((data) => {
-        setRoom(data.room);
-        setUsers(data.users);
-        setScores(data.scores);
-        setRecords(data.records ?? []);
-      })
-      .catch(() => router.push('/'))
-      .finally(() => setLoading(false));
-  }, [roomId, router]);
+  useRoomSocket(roomId, {
+    onUpdate: fetchRoom,
+    onDraw: handleRoomDraw,
+  });
+
+  useEffect(() => {
+    if (activeDraw || pendingDraws.length === 0) {
+      return;
+    }
+
+    const [nextDraw, ...rest] = pendingDraws;
+    setPendingDraws(rest);
+
+    const deckElement = deckRef.current;
+    const targetElement = playerAreaRefs.current[nextDraw.toUserId];
+
+    if (!deckElement || !targetElement) {
+      return;
+    }
+
+    const deckRect = deckElement.getBoundingClientRect();
+    const targetRect = targetElement.getBoundingClientRect();
+
+    setActiveDraw({
+      ...nextDraw,
+      startX: deckRect.left + deckRect.width / 2 - DRAW_CARD_WIDTH / 2,
+      startY: deckRect.top + deckRect.height / 2 - DRAW_CARD_HEIGHT / 2,
+      endX: targetRect.left + targetRect.width / 2 - DRAW_CARD_WIDTH / 2,
+      endY: targetRect.top + targetRect.height / 2 - DRAW_CARD_HEIGHT / 2,
+    });
+  }, [activeDraw, pendingDraws]);
+
+  useEffect(() => {
+    if (activeDraw || pendingDraws.length > 0 || !hasPendingAnimationRef.current) {
+      return;
+    }
+
+    hasPendingAnimationRef.current = false;
+    flushQueuedRoomData();
+  }, [activeDraw, flushQueuedRoomData, pendingDraws.length]);
+
+  const isOwner = !!room && !!currentUser && room.creatorId === currentUser.id;
+  const isPokerRoom = room?.gameType === 'poker_rounds';
+  const currentUserHand = useMemo(
+    () => (currentUser ? getHandForUser(currentRound, currentUser.id) : null),
+    [currentRound, currentUser]
+  );
+
+  const roundTotal = useMemo(
+    () => users.reduce((sum, user) => sum + Number(allocations[user.id] ?? 0), 0),
+    [allocations, users]
+  );
+
+  const drawInteractionLocked = isDrawingCard || !!activeDraw || pendingDraws.length > 0;
+  const showDrawButton =
+    !!currentUser &&
+    !!currentRound &&
+    room?.status === 'active' &&
+    currentUserHand?.isParticipant === true;
+  const canDraw =
+    showDrawButton &&
+    currentRound.remainingCardCount > 0 &&
+    !drawInteractionLocked;
+
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    return isToday
+      ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString('zh-CN', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+  };
+
+  const openDealModal = () => {
+    const nextAllocations = users.reduce<Record<string, string>>((acc, user) => {
+      const hand = getHandForUser(currentRound, user.id);
+      const previousCount = hand ? Math.max(hand.hiddenCount, hand.visibleCards.length) : 1;
+      acc[user.id] = String(previousCount);
+      return acc;
+    }, {});
+    setAllocations(nextAllocations);
+    dealRoundModal.onOpen();
+  };
 
   const handleGiveScore = async () => {
     if (!selectedUser || !currentUser) return;
 
     try {
-      await api.addScore(roomId, currentUser.id, selectedUser.id, points);
+      await api.addScore(roomId, selectedUser.id, points);
       setScores((prev) => ({
         ...prev,
         [selectedUser.id]: (prev[selectedUser.id] || 0) + points,
@@ -125,20 +397,86 @@ export default function RoomPage() {
       setSelectedUser(null);
       setPoints(1);
     } catch (err) {
+      if (isUnauthorizedError(err)) {
+        router.push('/login');
+        return;
+      }
       alert(err instanceof Error ? err.message : '添加分数失败');
     }
   };
 
-  if (loading || !room || !currentUser) return null;
+  const handleDealRound = async () => {
+    if (!room || !isOwner) return;
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
-    return isToday
-      ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-      : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (roundTotal < 1 || roundTotal > 54) {
+      alert('本轮总发牌数必须在 1 到 54 张之间');
+      return;
+    }
+
+    const payload: DealAllocation[] = users.map((user) => ({
+      userId: user.id,
+      cardCount: Number(allocations[user.id] ?? 0),
+    }));
+
+    try {
+      await api.dealRound(room.id, payload);
+      dealRoundModal.onClose();
+      await fetchRoom();
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        router.push('/login');
+        return;
+      }
+      alert(err instanceof Error ? err.message : '发牌失败');
+    }
   };
+
+  const handleDrawCard = async () => {
+    if (!room || !canDraw) {
+      return;
+    }
+
+    setIsDrawingCard(true);
+
+    try {
+      await api.drawCard(room.id);
+    } catch (err) {
+      setIsDrawingCard(false);
+      if (isUnauthorizedError(err)) {
+        router.push('/login');
+        return;
+      }
+      alert(err instanceof Error ? err.message : '抽牌失败');
+    }
+  };
+
+  const handleFinishRoom = async () => {
+    if (!confirm('确定要结束游戏吗？结束后将无法继续打分。')) return;
+
+    try {
+      await api.finishRoom(roomId);
+      alert('游戏已结束');
+      router.push('/');
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        router.push('/login');
+        return;
+      }
+      alert(err instanceof Error ? err.message : '结束游戏失败');
+    }
+  };
+
+  if (!currentUser) return null;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <Spinner size="lg" color="secondary" />
+      </div>
+    );
+  }
+
+  if (!room) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 sm:p-6">
@@ -146,51 +484,133 @@ export default function RoomPage() {
         <div className="flex-1 min-w-0">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
             <div>
-              <h1 className="text-2xl sm:text-4xl font-bold text-purple-400">{room.name}</h1>
-              <p className="text-slate-400 mt-1 sm:mt-2 text-sm sm:text-base">房间 ID: {room.id}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl sm:text-4xl font-bold text-purple-400">{room.name}</h1>
+                {room.status === 'finished' && (
+                  <Chip color="danger" variant="flat">已结束</Chip>
+                )}
+                {room.status === 'active' && (
+                  <Chip color="success" variant="flat">进行中</Chip>
+                )}
+                <Chip variant="flat" color={room.gameType === 'poker_rounds' ? 'secondary' : 'default'}>
+                  {GAME_TYPE_LABELS[room.gameType]}
+                </Chip>
+              </div>
+              <p className="text-slate-400 mt-1 sm:mt-2 text-sm sm:text-base">
+                房间号 #{room.roomNumber} · 房主: {room.creatorName}
+              </p>
+              {isPokerRoom && (
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <Chip color="warning" variant="flat">
+                    {currentRound ? `第 ${currentRound.roundNumber} 轮` : '未发牌'}
+                  </Chip>
+                  {currentRound && (
+                    <span className="text-xs sm:text-sm text-slate-400">
+                      最近发牌: {formatTime(currentRound.dealtAt)}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-3 rounded-2xl border border-pink-500/30 bg-slate-900/70 px-4 py-3">
+                    <div ref={deckRef} className="relative h-16 w-12 shrink-0">
+                      <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-lg border border-purple-500/20 bg-slate-950/60" />
+                      <CardBack className="absolute inset-0" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-pink-300/70">公共牌堆</p>
+                      <p className="text-sm font-semibold text-slate-100">
+                        {currentRound ? `剩余 ${currentRound.remainingCardCount} 张` : '等待房主发牌'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <Button
-              color="default"
-              variant="flat"
-              onPress={() => router.push('/')}
-              className="whitespace-nowrap w-full sm:w-auto"
-            >
-              返回大厅
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {isPokerRoom && room.status === 'active' && isOwner && (
+                <Button
+                  color="secondary"
+                  variant="shadow"
+                  onPress={openDealModal}
+                  className="whitespace-nowrap"
+                >
+                  {currentRound ? '发下一轮' : '开始第一轮'}
+                </Button>
+              )}
+              {room.status === 'active' && (
+                <Button
+                  color="danger"
+                  variant="flat"
+                  onPress={handleFinishRoom}
+                  className="whitespace-nowrap"
+                >
+                  结束游戏
+                </Button>
+              )}
+              <Button
+                color="default"
+                variant="flat"
+                onPress={() => router.push('/')}
+                className="whitespace-nowrap"
+              >
+                返回大厅
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-            {users.map((user) => (
-              <Card
-                key={user.id}
-                isPressable
-                onPress={() => user.id !== currentUser.id && setSelectedUser(user)}
-                className="relative bg-slate-800/50 border border-purple-500/30 hover:border-purple-500"
-              >
-                <CardBody className="flex flex-col items-center p-4 sm:p-6">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-4 border-purple-500 mb-3 sm:mb-4 shrink-0">
-                    <img
-                      src={user.avatar}
-                      alt={user.name}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                  <h3 className="text-base sm:text-lg font-bold text-purple-300 mb-1 sm:mb-2 truncate max-w-full">
-                    {user.name}
-                  </h3>
-                  <div className="text-2xl sm:text-3xl font-bold text-pink-400">
-                    {scores[user.id] || 0}
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-400 mt-1">分数</p>
-                  {user.id === currentUser.id && (
-                    <Chip size="sm" color="secondary" className="absolute top-2 right-2">
-                      你
-                    </Chip>
-                  )}
-                </CardBody>
-              </Card>
-            ))}
+            {users.map((user) => {
+              const hand = getHandForUser(currentRound, user.id);
+              const isSelf = user.id === currentUser.id;
+
+              return (
+                <div key={user.id} ref={setPlayerAreaRef(user.id)} className="relative">
+                  <Card
+                    isPressable={room.status === 'active' && user.id !== currentUser.id}
+                    aria-label={isSelf ? `${user.name} 当前分数` : `给 ${user.name} 打分`}
+                    onClick={() =>
+                      room.status === 'active' && user.id !== currentUser.id && setSelectedUser(user)
+                    }
+                    onPress={() =>
+                      room.status === 'active' && user.id !== currentUser.id && setSelectedUser(user)
+                    }
+                    className="relative bg-slate-800/50 border border-purple-500/30 hover:border-purple-500"
+                  >
+                    <CardBody className="flex flex-col items-center p-4 sm:p-6">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-4 border-purple-500 mb-3 sm:mb-4 shrink-0">
+                        <img
+                          src={user.avatar}
+                          alt={user.name}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <h3 className="text-base sm:text-lg font-bold text-purple-300 mb-1 sm:mb-2 truncate max-w-full">
+                        {user.name}
+                      </h3>
+                      <div className="text-2xl sm:text-3xl font-bold text-pink-400">
+                        {scores[user.id] || 0}
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-400 mt-1">分数</p>
+                      {isSelf && (
+                        <Chip size="sm" color="secondary" className="absolute top-2 right-2">
+                          你
+                        </Chip>
+                      )}
+                      {isPokerRoom && (
+                        <HandStrip
+                          currentRound={currentRound}
+                          hand={hand}
+                          isSelf={isSelf}
+                          showDrawButton={isSelf && showDrawButton}
+                          canDraw={isSelf && canDraw}
+                          isDrawing={isSelf && drawInteractionLocked}
+                          onDraw={handleDrawCard}
+                        />
+                      )}
+                    </CardBody>
+                  </Card>
+                </div>
+              );
+            })}
           </div>
 
           <Modal
@@ -228,10 +648,11 @@ export default function RoomPage() {
                     </div>
                     <Input
                       type="number"
-                      label="分数"
                       value={String(points)}
                       onValueChange={(v) => setPoints(Number(v) || 0)}
                       min={1}
+                      placeholder="请输入分数"
+                      aria-label="分数"
                       classNames={{
                         input: 'text-center',
                         inputWrapper: 'bg-slate-900',
@@ -261,9 +682,83 @@ export default function RoomPage() {
               )}
             </ModalContent>
           </Modal>
+
+          <Modal
+            isOpen={dealRoundModal.isOpen}
+            onOpenChange={dealRoundModal.onOpenChange}
+            placement="center"
+            scrollBehavior="inside"
+            classNames={{
+              base: 'bg-slate-800 border border-purple-500/50',
+              header: 'border-b border-default-200',
+              body: 'py-6',
+              footer: 'border-t border-default-200',
+            }}
+          >
+            <ModalContent>
+              <ModalHeader className="flex flex-col gap-1 text-purple-400">
+                {currentRound ? `配置第 ${currentRound.roundNumber + 1} 轮发牌` : '配置第一轮发牌'}
+              </ModalHeader>
+              <ModalBody>
+                <p className="text-sm text-slate-400">
+                  每轮都会重新收牌、洗出一副全新的 54 张扑克牌；未发出的牌会保留为本轮剩余牌堆，供后续抽牌使用。
+                </p>
+                <div className="space-y-3">
+                  {users.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center gap-3 rounded-xl border border-purple-500/20 bg-slate-900/60 p-3"
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div className="h-10 w-10 overflow-hidden rounded-full border-2 border-purple-500/40">
+                          <img
+                            src={user.avatar}
+                            alt={user.name}
+                            className="h-full w-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-100">{user.name}</p>
+                          <p className="text-xs text-slate-500">{user.id === currentUser.id ? '你' : '房间成员'}</p>
+                        </div>
+                      </div>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={allocations[user.id] ?? '1'}
+                        aria-label={`${user.name} 发牌张数`}
+                        onValueChange={(value) =>
+                          setAllocations((prev) => ({
+                            ...prev,
+                            [user.id]: value,
+                          }))
+                        }
+                        className="w-28"
+                        classNames={{
+                          input: 'text-center',
+                          inputWrapper: 'bg-slate-950/90',
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-xl border border-pink-500/30 bg-pink-500/10 px-4 py-3 text-sm text-pink-200">
+                  本轮总发牌数: <span className="font-bold">{roundTotal}</span> / 54
+                </div>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={dealRoundModal.onClose} className="whitespace-nowrap">
+                  取消
+                </Button>
+                <Button color="secondary" onPress={handleDealRound} className="whitespace-nowrap">
+                  确认发牌
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
         </div>
 
-        {/* 桌面端侧边栏 */}
         <aside className="hidden lg:block w-72 shrink-0">
           <div className="sticky top-6 bg-slate-800/50 backdrop-blur-sm border border-purple-500/30 rounded-xl p-4">
             <h3 className="text-lg font-bold text-purple-400 mb-4 flex items-center gap-2">
@@ -275,7 +770,30 @@ export default function RoomPage() {
         </aside>
       </div>
 
-      {/* 移动端：浮动按钮 + Drawer */}
+      <AnimatePresence>
+        {activeDraw && (
+          <motion.div
+            key={activeDraw.drawId}
+            className="pointer-events-none fixed left-0 top-0 z-[70]"
+            initial={{ x: activeDraw.startX, y: activeDraw.startY, rotate: -16, scale: 0.92, opacity: 0.95 }}
+            animate={{
+              x: activeDraw.endX,
+              y: activeDraw.endY,
+              rotate: 10,
+              scale: 1.02,
+              opacity: 1,
+            }}
+            transition={{
+              duration: 0.75,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            onAnimationComplete={() => setActiveDraw(null)}
+          >
+            <CardBack />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="lg:hidden fixed bottom-6 right-6 z-40">
         <Button
           isIconOnly

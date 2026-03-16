@@ -10,6 +10,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/api', () => ({
   getCurrentUser: vi.fn(),
+  isUnauthorizedError: vi.fn(() => false),
   setCurrentUser: vi.fn(),
   api: {
     register: vi.fn(),
@@ -19,6 +20,11 @@ vi.mock('@/lib/api', () => ({
     getRoom: vi.fn(),
     joinRoom: vi.fn(),
     addScore: vi.fn(),
+    finishRoom: vi.fn(),
+    dealRound: vi.fn(),
+    drawCard: vi.fn(),
+    getUserHistory: vi.fn(),
+    logout: vi.fn(),
   },
 }));
 

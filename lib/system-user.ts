@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 
 export const INITIAL_SCORE = 100;
-const SYSTEM_EMAIL = 'system@game-score.local';
+export const SYSTEM_EMAIL = 'system@game-score.local';
 
 export async function getOrCreateSystemUser() {
   let system = await prisma.user.findUnique({

@@ -10,7 +10,7 @@
 - ✅ 创建房间（密码保护）
 - ✅ 加入房间
 - ✅ 房间内互相给分
-- ✅ 实时分数显示
+- ✅ 实时分数显示（WebSocket 同步，多人操作即时更新）
 - ✅ 用户中心
 - ✅ 数据持久化（SQLite 数据库）
 
@@ -45,12 +45,12 @@ npm install
    ```
    DATABASE_URL="file:./dev.db"
    ```
-2. 执行迁移（如尚未执行）：
+2. 启动应用时会自动执行数据库迁移；如需手动执行，也可以运行：
    ```bash
    npx prisma migrate deploy
    ```
 
-数据库文件 `prisma/dev.db` 会在首次迁移时自动创建。
+注意：Prisma Schema 位于 `prisma/schema.prisma`，所以这里的 SQLite 相对路径最终对应的实际文件是 `prisma/dev.db`。
 
 ### 开发模式
 
@@ -59,6 +59,8 @@ npm run dev
 ```
 
 访问 http://localhost:3000
+
+> **注意**：实时同步依赖 WebSocket，必须使用 `npm run dev` 启动（会运行自定义服务器）。若使用 `npx next dev` 直接启动，则无法实时同步。
 
 ### 运行测试
 
@@ -228,4 +230,3 @@ game-score/
 ## License
 
 MIT
-
