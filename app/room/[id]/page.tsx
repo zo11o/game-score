@@ -43,6 +43,14 @@ const GAME_TYPE_LABELS: Record<Room['gameType'], string> = {
 
 const DRAW_CARD_WIDTH = 56;
 const DRAW_CARD_HEIGHT = 80;
+const SORTABLE_RANK_ORDER = ['RJ', 'BJ', 'A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3', '2'] as const;
+const SORTABLE_SUIT_ORDER: Record<PlayingCard['suit'], number> = {
+  joker: 0,
+  spades: 1,
+  hearts: 2,
+  clubs: 3,
+  diamonds: 4,
+};
 
 type AnimatedDraw = RoomDrawEvent & {
   startX: number;
@@ -53,6 +61,29 @@ type AnimatedDraw = RoomDrawEvent & {
 
 function getHandForUser(currentRound: CurrentRound | null, userId: string): RoundHand | null {
   return currentRound?.hands.find((item) => item.userId === userId) ?? null;
+}
+
+function sortPlayingCards(cards: PlayingCard[]): PlayingCard[] {
+  const rankPriority = new Map<string, number>(
+    SORTABLE_RANK_ORDER.map((rank, index) => [rank, index])
+  );
+
+  return [...cards].sort((left, right) => {
+    const leftRankKey = left.code === 'RJ' || left.code === 'BJ' ? left.code : left.rank;
+    const rightRankKey = right.code === 'RJ' || right.code === 'BJ' ? right.code : right.rank;
+    const rankDelta = (rankPriority.get(leftRankKey) ?? 999) - (rankPriority.get(rightRankKey) ?? 999);
+
+    if (rankDelta !== 0) {
+      return rankDelta;
+    }
+
+    const suitDelta = SORTABLE_SUIT_ORDER[left.suit] - SORTABLE_SUIT_ORDER[right.suit];
+    if (suitDelta !== 0) {
+      return suitDelta;
+    }
+
+    return left.code.localeCompare(right.code);
+  });
 }
 
 function RecordsPanel({
@@ -196,13 +227,14 @@ function HandStrip({
   const visibleCount = hand.visibleCards.length;
   const hiddenCount = hand.hiddenCount;
   const hasCards = visibleCount > 0 || hiddenCount > 0;
+  const displayCards = isSelf ? sortPlayingCards(hand.visibleCards) : hand.visibleCards;
 
   return (
     <div className="mt-3 w-full">
       <p className="text-[11px] text-slate-400 text-center mb-2">本轮手牌</p>
       {hasCards ? (
         <div className="flex flex-wrap justify-center gap-2">
-          {hand.visibleCards.map((card) => (
+          {displayCards.map((card) => (
             <ClickableCardFace
               key={card.code}
               card={card}
