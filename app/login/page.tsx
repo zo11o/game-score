@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { api, setCurrentUser } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { Button, Input, Spinner, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure } from '@heroui/react';
+import { Button, Input, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure } from '@heroui/react';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -61,7 +61,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-6">
       <div className="bg-slate-800/50 backdrop-blur-sm border border-purple-500/50 rounded-xl p-8 max-w-md w-full scanlines">
-        <h1 className="text-4xl font-bold text-center neon-glow text-purple-400 mb-8">赛事记分</h1>
+        <h1 className="text-3xl sm:text-4xl font-bold text-center neon-glow text-purple-400 mb-8">赛事记分</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
           <Input
             type="email"

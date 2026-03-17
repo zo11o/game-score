@@ -280,10 +280,11 @@ describe('Room Page', () => {
     render(<RoomPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('返回大厅')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '返回上一页' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '回到首页' })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('返回大厅'));
+    fireEvent.click(screen.getByRole('button', { name: '返回上一页' }));
 
     expect(mockPush).toHaveBeenCalledWith('/');
   });

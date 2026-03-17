@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, getCurrentUser, isUnauthorizedError, setCurrentUser } from '@/lib/api';
+import { PageHeader } from '@/components/page-header';
 import type { User, ParticipationHistory } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { Button, Card, CardBody, Avatar, Chip, Spinner } from '@heroui/react';
@@ -56,17 +57,12 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold neon-glow text-purple-400">用户中心</h1>
-          <Button
-            color="default"
-            variant="flat"
-            onPress={() => router.push('/')}
-            className="whitespace-nowrap w-full sm:w-auto"
-          >
-            返回大厅
-          </Button>
-        </div>
+        <PageHeader
+          title="用户中心"
+          subtitle="查看个人资料、历史参与记录与当前账号状态"
+          showBackButton
+          showHomeButton
+        />
 
         <Card className="bg-slate-800/50 backdrop-blur-sm border border-purple-500/50">
           <CardBody className="p-6 sm:p-8">
