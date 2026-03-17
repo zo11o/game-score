@@ -45,25 +45,37 @@ export async function POST(
     }
 
     const systemUser = await getOrCreateSystemUser();
-    await prisma.$transaction([
-      prisma.roomMember.create({
-        data: { roomId: id, userId: session.user.id },
-      }),
-      prisma.score.create({
+    await prisma.$transaction(async (tx) => {
+      const latestMember = await tx.roomMember.findFirst({
+        where: { roomId: id },
+        orderBy: { playerNumber: 'desc' },
+        select: { playerNumber: true },
+      });
+
+      await tx.roomMember.create({
+        data: {
+          roomId: id,
+          userId: session.user.id,
+          playerNumber: (latestMember?.playerNumber ?? 0) + 1,
+        },
+      });
+
+      await tx.score.create({
         data: {
           roomId: id,
           fromUserId: systemUser.id,
           toUserId: session.user.id,
           points: INITIAL_SCORE,
         },
-      }),
-      prisma.room.update({
+      });
+
+      await tx.room.update({
         where: { id },
         data: {
           lastActivityAt: new Date(),
         },
-      }),
-    ]);
+      });
+    });
 
     broadcastRoomUpdate(id);
 

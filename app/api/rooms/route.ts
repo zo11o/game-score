@@ -6,6 +6,12 @@ import { serializeRoom } from '@/lib/room-response';
 import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
 
 const VALID_GAME_TYPES = new Set(['classic', 'poker_rounds']);
+const VALID_ROUND_ORDER_MODES = new Set([
+  'rotate_by_player_number',
+  'random_each_round',
+  'owner_sets_full_order',
+  'owner_sets_first_player',
+]);
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,7 +40,9 @@ export async function GET(request: NextRequest) {
         status: 'active',
       },
       include: {
-        members: true,
+        members: {
+          orderBy: { playerNumber: 'asc' },
+        },
         creator: {
           select: {
             id: true,
@@ -64,7 +72,7 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse();
     }
 
-    const { name, password, gameType } = await request.json();
+    const { name, password, gameType, roundOrderMode } = await request.json();
 
     if (!name || !password) {
       return errorResponse('房间名称和密码不能为空', 400);
@@ -72,6 +80,20 @@ export async function POST(request: NextRequest) {
 
     if (gameType && !VALID_GAME_TYPES.has(gameType)) {
       return errorResponse('不支持的游戏类型', 400);
+    }
+
+    if (gameType === 'poker_rounds' && !roundOrderMode) {
+      return NextResponse.json(
+        { error: '扑克轮次房间需要选择每轮顺序规则' },
+        { status: 400 }
+      );
+    }
+
+    if (roundOrderMode && !VALID_ROUND_ORDER_MODES.has(roundOrderMode)) {
+      return NextResponse.json(
+        { error: '不支持的轮次顺序规则' },
+        { status: 400 }
+      );
     }
 
     // Get the next room number
@@ -89,9 +111,10 @@ export async function POST(request: NextRequest) {
         roomNumber: nextRoomNumber,
         creatorId: session.user.id,
         gameType: gameType ?? 'classic',
+        roundOrderMode: gameType === 'poker_rounds' ? roundOrderMode : 'rotate_by_player_number',
         lastActivityAt: new Date(),
         members: {
-          create: { userId: session.user.id },
+          create: { userId: session.user.id, playerNumber: 1 },
         },
       },
       include: {

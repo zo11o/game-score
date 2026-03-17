@@ -3,14 +3,21 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { api, getCurrentUser, isUnauthorizedError } from '@/lib/api';
+import {
+  buildTurnOrderPreview,
+  getTurnOrderPositions,
+  ROUND_ORDER_MODE_LABELS,
+} from '@/lib/round-order';
 import { useRoomSocket } from '@/lib/use-room-socket';
 import type {
   CurrentRound,
   DealAllocation,
+  DealRoundPayload,
   PlayingCard,
   Room,
   RoomDetailsResponse,
   RoomDrawEvent,
+  RoomUser,
   RoundHand,
   User,
   ScoreRecord,
@@ -431,17 +438,19 @@ function HandStrip({
 
 export default function RoomPage() {
   const [room, setRoom] = useState<Room | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<RoomUser[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [records, setRecords] = useState<ScoreRecord[]>([]);
   const [currentRound, setCurrentRound] = useState<CurrentRound | null>(null);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<RoomUser | null>(null);
   const [points, setPoints] = useState(1);
   const [loading, setLoading] = useState(true);
   const [isDrawingCard, setIsDrawingCard] = useState(false);
   const [isTogglingCard, setIsTogglingCard] = useState(false);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+  const [manualOrderedUserIds, setManualOrderedUserIds] = useState<string[]>([]);
+  const [selectedFirstUserId, setSelectedFirstUserId] = useState<string | null>(null);
   const [pendingDraws, setPendingDraws] = useState<RoomDrawEvent[]>([]);
   const [activeDraw, setActiveDraw] = useState<AnimatedDraw | null>(null);
   const [dealAnimations, setDealAnimations] = useState<DealAnimation[]>([]);
@@ -598,8 +607,18 @@ export default function RoomPage() {
     ) {
       const deckRect = deckRef.current.getBoundingClientRect();
       let animationIndex = 0;
+      const handsByUserId = new Map(currentRound.hands.map((hand) => [hand.userId, hand]));
+      const animationOrder =
+        currentRound.turnOrderUserIds.length > 0
+          ? currentRound.turnOrderUserIds
+          : currentRound.hands.map((hand) => hand.userId);
 
-      const nextAnimations = currentRound.hands.flatMap((hand) => {
+      const nextAnimations = animationOrder.flatMap((userId) => {
+        const hand = handsByUserId.get(userId);
+        if (!hand) {
+          return [];
+        }
+
         const targetElement = playerAreaRefs.current[hand.userId];
         if (!targetElement) {
           return [];
@@ -640,29 +659,39 @@ export default function RoomPage() {
     body: 'px-4 py-5 sm:px-6 sm:py-6',
     footer: 'flex-col-reverse gap-2 border-t border-default-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-6',
   } as const;
-  const orderedUsers = useMemo(() => {
-    if (!currentUser) {
-      return users;
+  const orderedUsers = useMemo(
+    () => [...users].sort((left, right) => left.playerNumber - right.playerNumber),
+    [users]
+  );
+  const nextRoundNumber = (currentRound?.roundNumber ?? 0) + 1;
+  const participantUserIds = useMemo(
+    () => orderedUsers.map((user) => user.id),
+    [orderedUsers]
+  );
+  const currentTurnOrderPositions = useMemo(
+    () => getTurnOrderPositions(currentRound?.turnOrderUserIds ?? []),
+    [currentRound?.turnOrderUserIds]
+  );
+  const requiresFullManualOrder = room?.roundOrderMode === 'owner_sets_full_order' && nextRoundNumber > 1;
+  const requiresFirstPlayerSelection =
+    room?.roundOrderMode === 'owner_sets_first_player' && nextRoundNumber > 1;
+  const nextRoundPreviewUserIds = useMemo(() => {
+    if (!room) {
+      return [];
     }
 
-    return [...users].sort((left, right) => {
-      if (left.id === currentUser.id) {
-        return -1;
-      }
-
-      if (right.id === currentUser.id) {
-        return 1;
-      }
-
-      return 0;
+    return buildTurnOrderPreview(room.roundOrderMode, participantUserIds, nextRoundNumber, {
+      orderedUserIds: manualOrderedUserIds,
+      firstUserId: selectedFirstUserId,
     });
-  }, [currentUser, users]);
-  const featuredUser = currentUser
-    ? orderedUsers.find((user) => user.id === currentUser.id) ?? null
-    : null;
-  const otherUsers = currentUser
-    ? orderedUsers.filter((user) => user.id !== currentUser.id)
-    : orderedUsers;
+  }, [manualOrderedUserIds, nextRoundNumber, orderedUsers, participantUserIds, room, selectedFirstUserId]);
+  const nextRoundPreviewUsers = useMemo(
+    () =>
+      nextRoundPreviewUserIds
+        .map((userId) => orderedUsers.find((user) => user.id === userId))
+        .filter((user): user is RoomUser => Boolean(user)),
+    [nextRoundPreviewUserIds, orderedUsers]
+  );
   const currentUserHand = useMemo(
     () => (currentUser ? getHandForUser(currentRound, currentUser.id) : null),
     [currentRound, currentUser]
@@ -705,7 +734,21 @@ export default function RoomPage() {
       return acc;
     }, {});
     setAllocations(nextAllocations);
+    setManualOrderedUserIds([]);
+    setSelectedFirstUserId(null);
     dealRoundModal.onOpen();
+  };
+
+  const appendManualOrderUser = (userId: string) => {
+    setManualOrderedUserIds((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
+  };
+
+  const clearManualOrder = () => {
+    setManualOrderedUserIds([]);
+  };
+
+  const selectFirstPlayer = (userId: string) => {
+    setSelectedFirstUserId(userId);
   };
 
   const handleGiveScore = async () => {
@@ -751,15 +794,37 @@ export default function RoomPage() {
       return;
     }
 
-    const payload: DealAllocation[] = orderedUsers.map((user) => ({
-      userId: user.id,
-      cardCount: Number(allocations[user.id] ?? 0),
-    }));
+    const payload: DealRoundPayload = {
+      allocations: orderedUsers.map((user) => ({
+        userId: user.id,
+        cardCount: Number(allocations[user.id] ?? 0),
+      })),
+    };
+
+    if (requiresFullManualOrder) {
+      if (manualOrderedUserIds.length !== orderedUsers.length) {
+        showError('请依次选出本轮所有玩家的完整顺序');
+        return;
+      }
+
+      payload.orderedUserIds = manualOrderedUserIds;
+    }
+
+    if (requiresFirstPlayerSelection) {
+      if (!selectedFirstUserId) {
+        showError('请先选择本轮的首位玩家');
+        return;
+      }
+
+      payload.firstUserId = selectedFirstUserId;
+    }
 
     try {
       await api.dealRound(room.id, payload);
       writeDealAllocationCache(room.id, allocations);
       dealRoundModal.onClose();
+      setManualOrderedUserIds([]);
+      setSelectedFirstUserId(null);
       await fetchRoom();
     } catch (err) {
       if (isUnauthorizedError(err)) {
@@ -840,16 +905,21 @@ export default function RoomPage() {
 
   if (!room) return null;
 
-  const renderUserCard = (user: User, options?: { featured?: boolean }) => {
-    const featured = options?.featured ?? false;
+  const renderUserCard = (user: RoomUser) => {
     const hand = getHandForUser(currentRound, user.id);
     const isSelf = user.id === currentUser.id;
+    const roundPosition = currentTurnOrderPositions.get(user.id);
+    const roundOrderDelay = roundPosition
+      ? room.roundOrderMode === 'random_each_round'
+        ? roundPosition * 0.08
+        : roundPosition * 0.04
+      : 0;
 
     return (
       <div
         key={user.id}
         ref={setPlayerAreaRef(user.id)}
-        className={featured ? 'relative w-full' : 'relative min-w-[280px] flex-1'}
+        className="relative min-w-[280px] flex-1 basis-[320px]"
       >
         <Card
           isPressable={room.status === 'active' && user.id !== currentUser.id}
@@ -861,31 +931,25 @@ export default function RoomPage() {
             room.status === 'active' && user.id !== currentUser.id && setSelectedUser(user)
           }
           className={
-            featured
+            isSelf
               ? 'relative w-full bg-slate-800/60 border border-secondary/40 shadow-[0_18px_45px_rgba(31,41,55,0.35)]'
               : 'relative w-full bg-slate-800/50 border border-purple-500/30 hover:border-purple-500'
           }
         >
-          <CardBody
-            className={
-              featured
-                ? 'flex flex-col gap-4 p-4 sm:p-5'
-                : 'flex flex-col gap-3 p-4 sm:p-5'
-            }
-          >
+          <CardBody className="flex flex-col gap-3 p-4 sm:p-5">
             <div
               className={
-                featured
-                  ? 'flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-secondary/25 bg-slate-950/25 p-4'
-                  : 'flex w-full items-center gap-3 rounded-2xl border border-purple-500/20 bg-slate-950/20 p-3'
+                isSelf
+                  ? 'flex w-full flex-wrap items-center gap-3 rounded-2xl border border-secondary/25 bg-slate-950/25 p-3 sm:p-4'
+                  : 'flex w-full flex-wrap items-center gap-3 rounded-2xl border border-purple-500/20 bg-slate-950/20 p-3'
               }
             >
-              <div className={featured ? 'flex min-w-0 items-center gap-3' : 'flex min-w-0 flex-1 items-center gap-3'}>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div
                   className={
-                    featured
-                      ? 'h-16 w-16 sm:h-20 sm:w-20 rounded-full overflow-hidden border-4 border-secondary shrink-0'
-                      : 'h-14 w-14 sm:h-16 sm:w-16 rounded-full overflow-hidden border-4 border-purple-500 shrink-0'
+                    isSelf
+                      ? 'h-16 w-16 rounded-full overflow-hidden border-4 border-secondary shrink-0 sm:h-20 sm:w-20'
+                      : 'h-14 w-14 rounded-full overflow-hidden border-4 border-purple-500 shrink-0 sm:h-16 sm:w-16'
                   }
                 >
                   <img
@@ -895,11 +959,11 @@ export default function RoomPage() {
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <div className={featured ? 'min-w-0' : 'min-w-0 flex-1'}>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h3
                       className={
-                        featured
+                        isSelf
                           ? 'truncate text-lg font-bold text-secondary-300 sm:text-2xl'
                           : 'truncate text-base font-bold text-purple-300 sm:text-lg'
                       }
@@ -908,10 +972,26 @@ export default function RoomPage() {
                     </h3>
                     {isSelf && <Chip size="sm" color="secondary">你</Chip>}
                   </div>
-                  <p className={featured ? 'mt-1 text-xs text-slate-400 sm:text-sm' : 'mt-0.5 text-[11px] text-slate-400 sm:text-xs'}>
+                  <p className={isSelf ? 'mt-1 text-xs text-slate-400 sm:text-sm' : 'mt-0.5 text-[11px] text-slate-400 sm:text-xs'}>
                     {isSelf ? '当前玩家' : '房间成员'}
                   </p>
-                  {isPokerRoom && featured && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-100">
+                      玩家 {user.playerNumber}
+                    </span>
+                    {isPokerRoom && roundPosition && (
+                      <motion.span
+                        key={`round-order-${currentRound?.roundNumber ?? 0}-${user.id}-${roundPosition}`}
+                        initial={{ opacity: 0, scale: 0.7 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.28, delay: roundOrderDelay, ease: [0.22, 1, 0.36, 1] }}
+                        className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-100"
+                      >
+                        本轮第 {roundPosition} 位
+                      </motion.span>
+                    )}
+                  </div>
+                  {isPokerRoom && isSelf && (
                     <p className="mt-2 text-[11px] text-amber-300/80 sm:text-xs">
                       双击卡牌可亮牌或扣回
                     </p>
@@ -920,21 +1000,21 @@ export default function RoomPage() {
               </div>
               <div
                 className={
-                  featured
+                  isSelf
                     ? 'ml-auto shrink-0 rounded-2xl bg-slate-900/70 px-4 py-3 text-center sm:min-w-[132px]'
-                    : 'shrink-0 rounded-xl bg-slate-900/70 px-3 py-2 text-center min-w-[88px]'
+                    : 'ml-auto shrink-0 rounded-xl bg-slate-900/70 px-3 py-2 text-center min-w-[88px]'
                 }
               >
-                <div className={featured ? 'text-3xl font-bold text-pink-400 sm:text-4xl' : 'text-2xl font-bold text-pink-400'}>
+                <div className={isSelf ? 'text-3xl font-bold text-pink-400 sm:text-4xl' : 'text-2xl font-bold text-pink-400'}>
                   {scores[user.id] || 0}
                 </div>
-                <p className={featured ? 'mt-1 text-xs text-slate-400 sm:text-sm' : 'mt-0.5 text-[11px] text-slate-400'}>
+                <p className={isSelf ? 'mt-1 text-xs text-slate-400 sm:text-sm' : 'mt-0.5 text-[11px] text-slate-400'}>
                   分数
                 </p>
               </div>
             </div>
             {isPokerRoom && (
-              <div className={featured ? 'mt-2 w-full max-w-3xl' : 'w-full'}>
+              <div className="w-full">
                 <HandStrip
                   currentRound={currentRound}
                   hand={hand}
@@ -945,7 +1025,7 @@ export default function RoomPage() {
                   onDraw={handleDrawCard}
                   onCardPress={handleToggleCardVisibility}
                   isTogglingCard={isSelf && isTogglingCard}
-                  showInteractionHint={!featured}
+                  showInteractionHint={!isSelf}
                 />
               </div>
             )}
@@ -980,6 +1060,9 @@ export default function RoomPage() {
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <Chip color="warning" variant="flat">
                     {currentRound ? `第 ${currentRound.roundNumber} 轮` : '未发牌'}
+                  </Chip>
+                  <Chip color="secondary" variant="flat">
+                    顺序规则：{ROUND_ORDER_MODE_LABELS[room.roundOrderMode]}
                   </Chip>
                   {currentRound && (
                     <span className="text-xs sm:text-sm text-slate-400">
@@ -1033,17 +1116,9 @@ export default function RoomPage() {
             </div>
           </div>
 
-          {featuredUser && (
-            <div className="mb-4 sm:mb-6">
-              {renderUserCard(featuredUser, { featured: true })}
-            </div>
-          )}
-
-          {otherUsers.length > 0 && (
-            <div className="flex flex-wrap gap-4 sm:gap-6">
-              {otherUsers.map((user) => renderUserCard(user))}
-            </div>
-          )}
+          <div className="flex flex-wrap gap-4 sm:gap-6">
+            {orderedUsers.map((user) => renderUserCard(user))}
+          </div>
 
           <Modal
             isOpen={!!selectedUser}
@@ -1128,6 +1203,12 @@ export default function RoomPage() {
                 <p className="text-sm text-slate-400">
                   每轮都会重新收牌、洗出一副全新的 54 张扑克牌；未发出的牌会保留为本轮剩余牌堆，供后续抽牌使用。
                 </p>
+                <div className="rounded-xl border border-sky-500/20 bg-slate-900/60 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.3em] text-sky-300/70">本房顺序规则</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-100">
+                    {ROUND_ORDER_MODE_LABELS[room.roundOrderMode]}
+                  </p>
+                </div>
                 <div className="space-y-3">
                   {orderedUsers.map((user) => (
                     <div
@@ -1145,7 +1226,9 @@ export default function RoomPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-slate-100">{user.name}</p>
-                          <p className="text-xs text-slate-500">{user.id === currentUser.id ? '你' : '房间成员'}</p>
+                          <p className="text-xs text-slate-500">
+                            玩家 {user.playerNumber} {user.id === currentUser.id ? '· 你' : '· 房间成员'}
+                          </p>
                         </div>
                       </div>
                       <Input
@@ -1171,6 +1254,123 @@ export default function RoomPage() {
                 <div className="rounded-xl border border-pink-500/30 bg-pink-500/10 px-4 py-3 text-sm text-pink-200">
                   本轮总发牌数: <span className="font-bold">{roundTotal}</span> / 54
                 </div>
+                {room.roundOrderMode === 'rotate_by_player_number' && (
+                  <div className="rounded-xl border border-amber-500/20 bg-slate-900/60 px-4 py-3">
+                    <p className="text-sm text-slate-300">本轮将按玩家号轮换自动确定顺序。</p>
+                  </div>
+                )}
+                {room.roundOrderMode === 'random_each_round' && (
+                  <div className="rounded-xl border border-amber-500/20 bg-slate-900/60 px-4 py-3">
+                    <p className="text-sm text-slate-300">确认发牌后，将为本轮所有玩家随机生成顺序并播放揭示动画。</p>
+                  </div>
+                )}
+                {room.roundOrderMode === 'owner_sets_full_order' && nextRoundNumber > 1 && (
+                  <div className="rounded-xl border border-amber-500/20 bg-slate-900/60 px-4 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-100">依次点人生成本轮完整顺序</p>
+                        <p className="text-xs text-slate-500">点过的玩家会依次拿到第 1、2、3... 位</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        onPress={clearManualOrder}
+                        isDisabled={manualOrderedUserIds.length === 0}
+                      >
+                        清空顺序
+                      </Button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {manualOrderedUserIds.length > 0 ? (
+                        manualOrderedUserIds.map((userId, index) => {
+                          const selectedUser = orderedUsers.find((user) => user.id === userId);
+                          if (!selectedUser) {
+                            return null;
+                          }
+
+                          return (
+                            <span
+                              key={userId}
+                              className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-100"
+                            >
+                              {index + 1}. 玩家 {selectedUser.playerNumber} {selectedUser.name}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <p className="text-xs text-slate-500">还没有选择本轮顺序。</p>
+                      )}
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {orderedUsers.map((user) => {
+                        const selectedIndex = manualOrderedUserIds.indexOf(user.id);
+
+                        return (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => appendManualOrderUser(user.id)}
+                            disabled={selectedIndex !== -1}
+                            className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
+                              selectedIndex !== -1
+                                ? 'cursor-not-allowed border-amber-400/40 bg-amber-500/10 text-amber-100'
+                                : 'border-purple-500/30 bg-slate-950/70 text-slate-100 hover:border-purple-400'
+                            }`}
+                          >
+                            <div className="font-semibold">玩家 {user.playerNumber} {user.name}</div>
+                            <div className="mt-1 text-xs text-slate-400">
+                              {selectedIndex !== -1 ? `已选为第 ${selectedIndex + 1} 位` : '点击加入顺序'}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {room.roundOrderMode === 'owner_sets_first_player' && nextRoundNumber > 1 && (
+                  <div className="rounded-xl border border-amber-500/20 bg-slate-900/60 px-4 py-4">
+                    <p className="text-sm font-semibold text-slate-100">选择本轮首位玩家</p>
+                    <p className="mt-1 text-xs text-slate-500">其余玩家会按玩家号顺延。</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {orderedUsers.map((user) => {
+                        const isSelected = selectedFirstUserId === user.id;
+
+                        return (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => selectFirstPlayer(user.id)}
+                            className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
+                              isSelected
+                                ? 'border-amber-400/40 bg-amber-500/10 text-amber-100'
+                                : 'border-purple-500/30 bg-slate-950/70 text-slate-100 hover:border-purple-400'
+                            }`}
+                          >
+                            <div className="font-semibold">玩家 {user.playerNumber} {user.name}</div>
+                            <div className="mt-1 text-xs text-slate-400">
+                              {isSelected ? '已设为首位玩家' : '点击设为首位'}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {(room.roundOrderMode !== 'random_each_round') && (
+                  <div className="rounded-xl border border-emerald-500/25 bg-slate-950/45 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.3em] text-emerald-300/70">下轮顺序预览</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {nextRoundPreviewUsers.map((user, index) => (
+                        <span
+                          key={user.id}
+                          className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100"
+                        >
+                          {index + 1}. 玩家 {user.playerNumber} {user.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </ModalBody>
               <ModalFooter>
                 <Button variant="light" onPress={dealRoundModal.onClose} className="w-full whitespace-nowrap sm:w-auto">
