@@ -25,6 +25,7 @@ vi.mock('@/lib/api', () => ({
     finishRoom: vi.fn(),
     dealRound: vi.fn(),
     drawCard: vi.fn(),
+    peekHand: vi.fn(),
     toggleCardVisibility: vi.fn(),
     getUserHistory: vi.fn(),
     logout: vi.fn(),
@@ -80,12 +81,14 @@ describe('Room Page', () => {
         visibleCards: [],
         hiddenCount: 0,
         isParticipant: true,
+        hasPeeked: true,
       },
       {
         userId: '2',
         visibleCards: [],
         hiddenCount: 0,
         isParticipant: true,
+        hasPeeked: false,
       },
     ],
     ...overrides,
@@ -310,12 +313,14 @@ describe('Room Page', () => {
             ],
             hiddenCount: 0,
             isParticipant: true,
+            hasPeeked: true,
           },
           {
             userId: '2',
             visibleCards: [],
             hiddenCount: 2,
             isParticipant: true,
+            hasPeeked: false,
           },
         ],
       }),
@@ -553,12 +558,14 @@ describe('Room Page', () => {
             visibleCards: [],
             hiddenCount: 0,
             isParticipant: true,
+            hasPeeked: true,
           },
           {
             userId: '2',
             visibleCards: [],
             hiddenCount: 2,
             isParticipant: true,
+            hasPeeked: false,
           },
         ],
       }),
@@ -579,6 +586,56 @@ describe('Room Page', () => {
 
     await waitFor(() => {
       expect(api.drawCard).toHaveBeenCalledWith('room1');
+    });
+  });
+
+  it('should keep self cards covered until peeking and show the peek button', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        currentRoundNumber: 1,
+      }),
+      users: [mockRoomUser1, mockRoomUser2],
+      scores: { '1': 0, '2': 3 },
+      records: [],
+      currentRound: buildRound({
+        remainingCardCount: 10,
+        hands: [
+          {
+            userId: '1',
+            visibleCards: [],
+            hiddenCount: 2,
+            isParticipant: true,
+            hasPeeked: false,
+          },
+          {
+            userId: '2',
+            visibleCards: [],
+            hiddenCount: 2,
+            isParticipant: true,
+            hasPeeked: false,
+          },
+        ],
+      }),
+    });
+    vi.mocked(api.peekHand).mockResolvedValue({
+      success: true,
+      roundNumber: 1,
+    } as never);
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '看牌' })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByLabelText('A♠ 已亮牌，双击收回')).not.toBeInTheDocument();
+    expect(screen.getByText('看牌后可查看未亮牌统计和亮牌操作。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '看牌' }));
+
+    await waitFor(() => {
+      expect(api.peekHand).toHaveBeenCalledWith('room1');
     });
   });
 
@@ -616,12 +673,14 @@ describe('Room Page', () => {
             ],
             hiddenCount: 0,
             isParticipant: true,
+            hasPeeked: true,
           },
           {
             userId: '2',
             visibleCards: [],
             hiddenCount: 2,
             isParticipant: true,
+            hasPeeked: false,
           },
         ],
       }),
@@ -678,12 +737,14 @@ describe('Room Page', () => {
             ],
             hiddenCount: 0,
             isParticipant: true,
+            hasPeeked: true,
           },
           {
             userId: '2',
             visibleCards: [],
             hiddenCount: 2,
             isParticipant: true,
+            hasPeeked: false,
           },
         ],
       }),

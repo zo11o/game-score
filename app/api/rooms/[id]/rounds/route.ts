@@ -196,6 +196,7 @@ export async function POST(
           remainingDeckJson: stringifyStringArray(remainingDeck),
           participantUserIdsJson: stringifyStringArray(participantUserIds),
           turnOrderUserIdsJson: stringifyStringArray(turnOrderUserIds),
+          lookedUserIdsJson: '[]',
           cards: {
             create: cardsToCreate,
           },

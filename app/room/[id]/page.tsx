@@ -332,23 +332,33 @@ function HandStrip({
   currentRound,
   hand,
   isSelf,
+  showPeekButton,
+  canPeek,
+  isPeeking,
+  onPeek,
   showDrawButton,
   canDraw,
   isDrawing,
   onDraw,
   onCardPress,
   isTogglingCard,
+  shouldAnimatePeekReveal = false,
   showInteractionHint = true,
 }: {
   currentRound: CurrentRound | null;
   hand: RoundHand | null;
   isSelf: boolean;
+  showPeekButton: boolean;
+  canPeek: boolean;
+  isPeeking: boolean;
+  onPeek: () => void;
   showDrawButton: boolean;
   canDraw: boolean;
   isDrawing: boolean;
   onDraw: () => void;
   onCardPress: (card: PlayingCard) => void;
   isTogglingCard: boolean;
+  shouldAnimatePeekReveal?: boolean;
   showInteractionHint?: boolean;
 }) {
   if (!currentRound) {
@@ -362,29 +372,46 @@ function HandStrip({
   const visibleCount = hand.visibleCards.length;
   const hiddenCount = hand.hiddenCount;
   const hasCards = visibleCount > 0 || hiddenCount > 0;
-  const displayCards = isSelf ? sortPlayingCards(hand.visibleCards) : hand.visibleCards;
+  const hasPeeked = !isSelf || hand.hasPeeked;
+  const displayCards = isSelf && hasPeeked ? sortPlayingCards(hand.visibleCards) : hand.visibleCards;
   const unrevealedCards = isSelf ? displayCards.filter((card) => !card.isFaceUp) : [];
   const suggestedScore = new Set(unrevealedCards.map(getCardScoreKey)).size;
 
   return (
     <div className="mt-3 w-full">
       <p className="text-[11px] text-slate-400 text-center mb-2">本轮手牌</p>
-      {isSelf && visibleCount > 0 && showInteractionHint && (
+      {isSelf && hasPeeked && visibleCount > 0 && showInteractionHint && (
         <p className="mb-2 text-[10px] text-center text-amber-300/80">
           双击卡牌可亮牌或扣回
         </p>
       )}
       {hasCards ? (
         <div className="flex flex-wrap justify-center gap-2">
-          {displayCards.map((card) => (
-            <ClickableCardFace
-              key={card.code}
-              card={card}
-              faceUpLabel={card.isFaceUp ? (isSelf ? '已亮' : '公开') : undefined}
-              onPress={isSelf ? () => onCardPress(card) : undefined}
-              isDisabled={isTogglingCard}
-            />
-          ))}
+          {hasPeeked &&
+            displayCards.map((card, index) => (
+              <motion.div
+                key={`${card.code}-${currentRound.roundNumber}-${hand.hasPeeked ? 'peeked' : 'hidden'}`}
+                initial={
+                  shouldAnimatePeekReveal
+                    ? { rotateY: 180, opacity: 0.35, scale: 0.92, y: 10 }
+                    : false
+                }
+                animate={{ rotateY: 0, opacity: 1, scale: 1, y: 0 }}
+                transition={{
+                  duration: 0.38,
+                  delay: shouldAnimatePeekReveal ? index * 0.06 : 0,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                className="relative [perspective:1000px]"
+              >
+                <ClickableCardFace
+                  card={card}
+                  faceUpLabel={card.isFaceUp ? (isSelf ? '已亮' : '公开') : undefined}
+                  onPress={isSelf ? () => onCardPress(card) : undefined}
+                  isDisabled={isTogglingCard || !hand.hasPeeked}
+                />
+              </motion.div>
+            ))}
           {Array.from({ length: hiddenCount }, (_, index) => (
             <CardBack key={`${hand.userId}-hidden-${index}`} />
           ))}
@@ -395,41 +422,60 @@ function HandStrip({
 
       {isSelf && showDrawButton && (
         <div className="mt-3 flex flex-col items-center gap-2">
-          <Button
-            size="sm"
-            color="warning"
-            variant="flat"
-            onPress={onDraw}
-            isDisabled={!canDraw}
-            isLoading={isDrawing}
-            className="whitespace-nowrap"
-          >
-            {currentRound.remainingCardCount > 0 ? '抽一张' : '牌堆已空'}
-          </Button>
-          <div className="w-full rounded-2xl border border-emerald-500/35 bg-slate-950/35 px-3 py-3">
-            <p className="text-[11px] text-center uppercase tracking-[0.24em] text-emerald-300/80">
-              未亮牌统计
-            </p>
-            {unrevealedCards.length > 0 ? (
-              <>
-                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-                  {unrevealedCards.map((card, index) => (
-                    <span
-                      key={`${card.code}-${index}`}
-                      className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-100"
-                    >
-                      {getCardSummaryLabel(card)}
-                    </span>
-                  ))}
-                </div>
-                <p className="mt-2 text-sm text-center text-emerald-100">
-                  应给分: <span className="font-bold text-emerald-300">{suggestedScore}</span>
-                </p>
-              </>
-            ) : (
-              <p className="mt-2 text-sm text-center text-slate-400">未亮牌已全部公开，应给分 0</p>
+          <div className="flex w-full flex-wrap items-center justify-center gap-2">
+            {showPeekButton && (
+              <Button
+                size="sm"
+                color="secondary"
+                variant="shadow"
+                onPress={onPeek}
+                isDisabled={!canPeek}
+                isLoading={isPeeking}
+                className="whitespace-nowrap"
+              >
+                看牌
+              </Button>
             )}
+            <Button
+              size="sm"
+              color="warning"
+              variant="flat"
+              onPress={onDraw}
+              isDisabled={!canDraw}
+              isLoading={isDrawing}
+              className="whitespace-nowrap"
+            >
+              {currentRound.remainingCardCount > 0 ? '抽一张' : '牌堆已空'}
+            </Button>
           </div>
+          {hand.hasPeeked ? (
+            <div className="w-full rounded-2xl border border-emerald-500/35 bg-slate-950/35 px-3 py-3">
+              <p className="text-[11px] text-center uppercase tracking-[0.24em] text-emerald-300/80">
+                未亮牌统计
+              </p>
+              {unrevealedCards.length > 0 ? (
+                <>
+                  <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                    {unrevealedCards.map((card, index) => (
+                      <span
+                        key={`${card.code}-${index}`}
+                        className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-100"
+                      >
+                        {getCardSummaryLabel(card)}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-sm text-center text-emerald-100">
+                    应给分: <span className="font-bold text-emerald-300">{suggestedScore}</span>
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-center text-slate-400">未亮牌已全部公开，应给分 0</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-[11px] text-center text-slate-500">看牌后可查看未亮牌统计和亮牌操作。</p>
+          )}
         </div>
       )}
     </div>
@@ -447,6 +493,7 @@ export default function RoomPage() {
   const [points, setPoints] = useState(1);
   const [loading, setLoading] = useState(true);
   const [isDrawingCard, setIsDrawingCard] = useState(false);
+  const [isPeekingHand, setIsPeekingHand] = useState(false);
   const [isTogglingCard, setIsTogglingCard] = useState(false);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [manualOrderedUserIds, setManualOrderedUserIds] = useState<string[]>([]);
@@ -454,6 +501,7 @@ export default function RoomPage() {
   const [pendingDraws, setPendingDraws] = useState<RoomDrawEvent[]>([]);
   const [activeDraw, setActiveDraw] = useState<AnimatedDraw | null>(null);
   const [dealAnimations, setDealAnimations] = useState<DealAnimation[]>([]);
+  const [peekRevealRoundNumber, setPeekRevealRoundNumber] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const deckRef = useRef<HTMLDivElement | null>(null);
@@ -696,6 +744,12 @@ export default function RoomPage() {
     () => (currentUser ? getHandForUser(currentRound, currentUser.id) : null),
     [currentRound, currentUser]
   );
+  const canPeekHand =
+    !!currentUserHand &&
+    currentUserHand.isParticipant &&
+    !currentUserHand.hasPeeked &&
+    currentUserHand.hiddenCount > 0 &&
+    room?.status === 'active';
 
   const roundTotal = useMemo(
     () => orderedUsers.reduce((sum, user) => sum + Number(allocations[user.id] ?? 0), 0),
@@ -712,6 +766,18 @@ export default function RoomPage() {
     showDrawButton &&
     currentRound.remainingCardCount > 0 &&
     !drawInteractionLocked;
+
+  useEffect(() => {
+    if (peekRevealRoundNumber === null) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setPeekRevealRoundNumber(null);
+    }, 700);
+
+    return () => window.clearTimeout(timeout);
+  }, [peekRevealRoundNumber]);
 
   const formatTime = (ts: number) => {
     const d = new Date(ts);
@@ -851,6 +917,28 @@ export default function RoomPage() {
         return;
       }
       showError(err instanceof Error ? err.message : '抽牌失败');
+    }
+  };
+
+  const handlePeekHand = async () => {
+    if (!room || !currentRound || !canPeekHand) {
+      return;
+    }
+
+    setIsPeekingHand(true);
+
+    try {
+      await api.peekHand(room.id);
+      setPeekRevealRoundNumber(currentRound.roundNumber);
+      await fetchRoom();
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        router.push('/login');
+        return;
+      }
+      showError(err instanceof Error ? err.message : '看牌失败');
+    } finally {
+      setIsPeekingHand(false);
     }
   };
 
@@ -1019,12 +1107,17 @@ export default function RoomPage() {
                   currentRound={currentRound}
                   hand={hand}
                   isSelf={isSelf}
+                  showPeekButton={isSelf && hand?.hasPeeked === false}
+                  canPeek={isSelf && canPeekHand}
+                  isPeeking={isSelf && isPeekingHand}
+                  onPeek={handlePeekHand}
                   showDrawButton={isSelf && showDrawButton}
                   canDraw={isSelf && canDraw}
                   isDrawing={isSelf && drawInteractionLocked}
                   onDraw={handleDrawCard}
                   onCardPress={handleToggleCardVisibility}
                   isTogglingCard={isSelf && isTogglingCard}
+                  shouldAnimatePeekReveal={isSelf && peekRevealRoundNumber === currentRound?.roundNumber}
                   showInteractionHint={!isSelf}
                 />
               </div>
