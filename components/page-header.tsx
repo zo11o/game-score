@@ -22,9 +22,9 @@ type NavIconButtonProps = {
 };
 
 const titleClassName =
-  'text-3xl sm:text-4xl font-bold neon-glow text-purple-400 break-words';
+  'text-3xl sm:text-4xl font-bold neon-glow text-emerald-800 break-words';
 const navButtonClassName =
-  'inline-flex h-11 w-11 items-center justify-center rounded-full border border-purple-500/30 bg-slate-900/70 text-purple-300 transition-all hover:border-purple-400 hover:bg-purple-500/10 hover:text-purple-200';
+  'inline-flex h-11 w-11 items-center justify-center rounded-full border border-emerald-200 bg-white/85 text-emerald-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800';
 
 function NavIconButton({ ariaLabel, onPress, children }: NavIconButtonProps) {
   return (
@@ -123,7 +123,7 @@ export function PageHeader({
           </div>
 
           {subtitle && (
-            <div className="mt-1.5 text-sm text-slate-400 sm:text-base">{subtitle}</div>
+            <div className="mt-1.5 text-sm text-emerald-700/75 sm:text-base">{subtitle}</div>
           )}
         </div>
 

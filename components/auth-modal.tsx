@@ -94,16 +94,16 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
       placement="center"
       backdrop="opaque"
       classNames={{
-        base: '!bg-slate-800 border border-purple-500/50',
-        backdrop: 'bg-black/70',
+        base: '!bg-white border border-emerald-200 shadow-2xl',
+        backdrop: 'bg-emerald-950/20',
         header: 'border-b border-default-200',
         body: 'py-6',
         footer: 'border-t border-default-200',
       }}
     >
-      <ModalContent className="!bg-slate-800 border border-purple-500/50">
+      <ModalContent className="!bg-white border border-emerald-200">
         <form onSubmit={handleSubmit}>
-          <ModalHeader className="flex flex-col gap-1 text-purple-400">
+          <ModalHeader className="flex flex-col gap-1 text-emerald-800">
             {isRegister ? '注册账号' : '登录账号'}
           </ModalHeader>
           <ModalBody className="gap-4">
@@ -119,7 +119,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
               isRequired
               placeholder="请输入邮箱"
               aria-label="邮箱"
-              classNames={{ inputWrapper: 'bg-default-100' }}
+              classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
               autoComplete="email"
             />
             <Input
@@ -130,7 +130,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
               placeholder="请输入密码（至少 6 位）"
               minLength={6}
               aria-label="密码"
-              classNames={{ inputWrapper: 'bg-default-100' }}
+              classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
               autoComplete={isRegister ? 'new-password' : 'current-password'}
             />
             {isRegister && (
@@ -141,7 +141,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                 isRequired={isRegister}
                 placeholder="请输入昵称"
                 aria-label="昵称"
-                classNames={{ inputWrapper: 'bg-default-100' }}
+                classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
                 autoComplete="name"
               />
             )}

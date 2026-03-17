@@ -65,10 +65,15 @@ describe('Home Page (Game Lobby)', () => {
     vi.mocked(api.getRooms).mockResolvedValue([]);
   });
 
-  it('should redirect to login if no current user', () => {
+  it('should allow guest browsing if no current user', async () => {
     render(<Home />);
 
-    expect(mockPush).toHaveBeenCalledWith('/login');
+    await waitFor(() => {
+      expect(screen.getByText('游戏大厅')).toBeInTheDocument();
+    });
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByText('浏览房间无需登录，创建或加入房间需要登录账号')).toBeInTheDocument();
   });
 
   it('should render game lobby for logged in user', async () => {
@@ -198,9 +203,20 @@ describe('Home Page (Game Lobby)', () => {
 
     fireEvent.change(screen.getByLabelText('房间名称'), { target: { value: 'Poker Room' } });
     fireEvent.change(screen.getByLabelText('房间密码'), { target: { value: 'password123' } });
-    fireEvent.change(screen.getByLabelText('游戏类型'), { target: { value: 'poker_rounds' } });
-    expect(screen.getByLabelText('每轮顺序规则')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('每轮顺序规则'), { target: { value: 'owner_sets_first_player' } });
+    const gameTypeTrigger = screen
+      .getAllByLabelText('游戏类型')
+      .find((element) => element.tagName === 'BUTTON');
+    expect(gameTypeTrigger).toBeDefined();
+    fireEvent.click(gameTypeTrigger!);
+    fireEvent.click(await screen.findByRole('option', { name: '扑克轮次' }));
+
+    const roundOrderTrigger = screen
+      .getAllByLabelText('每轮顺序规则')
+      .find((element) => element.tagName === 'BUTTON');
+    expect(roundOrderTrigger).toBeDefined();
+
+    fireEvent.click(roundOrderTrigger!);
+    fireEvent.click(await screen.findByRole('option', { name: '指定首位顺延' }));
 
     fireEvent.submit(screen.getByLabelText('房间名称').closest('form')!);
 
