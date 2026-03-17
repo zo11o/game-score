@@ -74,6 +74,7 @@ export interface RoundHand {
   visibleCards: PlayingCard[];
   hiddenCount: number;
   isParticipant: boolean;
+  hasPeeked: boolean;
 }
 
 export interface CurrentRound {

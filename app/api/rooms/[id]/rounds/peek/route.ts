@@ -1,16 +1,15 @@
-import { NextRequest } from 'next/server';
-import { errorResponse, successResponse } from '@/lib/api-response';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { parseStringArrayJson, stringifyStringArray } from '@/lib/round-state';
 import { broadcastRoomUpdate } from '@/lib/room-events';
-import { parseStringArrayJson } from '@/lib/round-state';
 import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
 
-class ToggleCardError extends Error {
+class PeekHandError extends Error {
   status: number;
 
   constructor(message: string, status: number) {
     super(message);
-    this.name = 'ToggleCardError';
+    this.name = 'PeekHandError';
     this.status = status;
   }
 }
@@ -26,11 +25,6 @@ export async function POST(
     }
 
     const { id } = await params;
-    const { cardCode } = (await request.json()) as { cardCode?: string };
-
-    if (!cardCode) {
-      return errorResponse('缺少要翻面的牌', 400);
-    }
 
     const result = await prisma.$transaction(async (tx) => {
       const room = await tx.room.findUnique({
@@ -41,23 +35,23 @@ export async function POST(
       });
 
       if (!room) {
-        throw new ToggleCardError('房间不存在', 404);
+        throw new PeekHandError('房间不存在', 404);
       }
 
       if (room.status === 'finished') {
-        throw new ToggleCardError('房间已结束，无法继续翻牌', 400);
+        throw new PeekHandError('房间已结束，无法继续看牌', 400);
       }
 
       if (room.gameType !== 'poker_rounds') {
-        throw new ToggleCardError('当前房型不支持翻牌', 400);
+        throw new PeekHandError('当前房型不支持看牌', 400);
       }
 
       if (!room.members.some((member) => member.userId === session.user.id)) {
-        throw new ToggleCardError('你还不是该房间成员', 403);
+        throw new PeekHandError('你还不是该房间成员', 403);
       }
 
       if (room.currentRoundNumber === null) {
-        throw new ToggleCardError('当前还没有开始发牌', 400);
+        throw new PeekHandError('当前还没有开始发牌', 400);
       }
 
       const round = await tx.roomRound.findUnique({
@@ -70,37 +64,23 @@ export async function POST(
       });
 
       if (!round) {
-        throw new ToggleCardError('当前轮次不存在', 404);
+        throw new PeekHandError('当前轮次不存在', 404);
       }
 
       const participantIds = parseStringArrayJson(round.participantUserIdsJson);
       if (!participantIds.includes(session.user.id)) {
-        throw new ToggleCardError('你是本轮开始后加入的成员，当前轮无法翻牌', 403);
+        throw new PeekHandError('你是本轮开始后加入的成员，当前轮无法看牌', 403);
       }
 
       const lookedUserIds = parseStringArrayJson(round.lookedUserIdsJson);
       if (!lookedUserIds.includes(session.user.id)) {
-        throw new ToggleCardError('请先看牌，再决定是否亮牌', 400);
+        await tx.roomRound.update({
+          where: { id: round.id },
+          data: {
+            lookedUserIdsJson: stringifyStringArray([...lookedUserIds, session.user.id]),
+          },
+        });
       }
-
-      const targetCard = await tx.roomRoundCard.findFirst({
-        where: {
-          roundId: round.id,
-          userId: session.user.id,
-          cardCode,
-        },
-      });
-
-      if (!targetCard) {
-        throw new ToggleCardError('这张牌不属于你当前轮的手牌', 404);
-      }
-
-      const updatedCard = await tx.roomRoundCard.update({
-        where: { id: targetCard.id },
-        data: {
-          isFaceUp: !targetCard.isFaceUp,
-        },
-      });
 
       await tx.room.update({
         where: { id: room.id },
@@ -111,22 +91,25 @@ export async function POST(
 
       return {
         roomId: room.id,
-        isFaceUp: updatedCard.isFaceUp,
+        roundNumber: round.roundNumber,
       };
     });
 
     broadcastRoomUpdate(result.roomId);
 
-    return successResponse({
+    return NextResponse.json({
       success: true,
-      isFaceUp: result.isFaceUp,
-    }, '翻牌成功');
+      roundNumber: result.roundNumber,
+    });
   } catch (err) {
-    if (err instanceof ToggleCardError) {
-      return errorResponse(err.message, err.status);
+    if (err instanceof PeekHandError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
     }
 
-    console.error('Toggle card visibility error:', err);
-    return errorResponse('翻牌失败，请重试', 500);
+    console.error('Peek hand error:', err);
+    return NextResponse.json(
+      { error: '看牌失败，请重试' },
+      { status: 500 }
+    );
   }
 }

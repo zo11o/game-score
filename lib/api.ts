@@ -154,6 +154,15 @@ export const api = {
     );
   },
 
+  async peekHand(roomId: string) {
+    return handleResponse<{ success: true; roundNumber: number }>(
+      await fetch(`/api/rooms/${roomId}/rounds/peek`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+  },
+
   async toggleCardVisibility(roomId: string, cardCode: string) {
     return handleResponse<{ success: true; isFaceUp: boolean }>(
       await fetch(`/api/rooms/${roomId}/rounds/cards/toggle`, {

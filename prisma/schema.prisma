@@ -60,6 +60,7 @@ model RoomRound {
   remainingDeckJson String @default("[]")
   participantUserIdsJson String @default("[]")
   turnOrderUserIdsJson String @default("[]")
+  lookedUserIdsJson String @default("[]")
   createdAt       DateTime @default(now())
 
   room          Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)

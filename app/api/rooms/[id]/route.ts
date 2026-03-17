@@ -101,6 +101,7 @@ export async function GET(
         const participantIds = new Set(parseStringArrayJson(round.participantUserIdsJson));
         const remainingDeck = parseStringArrayJson(round.remainingDeckJson);
         const turnOrderUserIds = parseStringArrayJson(round.turnOrderUserIdsJson);
+        const lookedUserIds = new Set(parseStringArrayJson(round.lookedUserIdsJson));
         const normalizedTurnOrderUserIds =
           turnOrderUserIds.length > 0
             ? turnOrderUserIds
@@ -123,12 +124,15 @@ export async function GET(
           turnOrderUserIds: normalizedTurnOrderUserIds,
           hands: room.members.map((member) => {
             const userCards = cardsByUser.get(member.userId) ?? [];
+            const hasPeeked = member.userId === session.user.id && lookedUserIds.has(member.userId);
             const visibleCards =
               member.userId === session.user.id
-                ? userCards.map((card) => ({
-                    ...serializeCard(card.cardCode),
-                    isFaceUp: card.isFaceUp,
-                  }))
+                ? hasPeeked
+                  ? userCards.map((card) => ({
+                      ...serializeCard(card.cardCode),
+                      isFaceUp: card.isFaceUp,
+                    }))
+                  : []
                 : userCards
                     .filter((card) => card.isFaceUp)
                     .map((card) => ({
@@ -139,8 +143,14 @@ export async function GET(
             return {
               userId: member.userId,
               visibleCards,
-              hiddenCount: member.userId === session.user.id ? 0 : userCards.length - visibleCards.length,
+              hiddenCount:
+                member.userId === session.user.id
+                  ? hasPeeked
+                    ? 0
+                    : userCards.length
+                  : userCards.length - visibleCards.length,
               isParticipant: participantIds.has(member.userId),
+              hasPeeked,
             };
           }),
         };
