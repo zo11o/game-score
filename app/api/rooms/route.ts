@@ -15,11 +15,6 @@ const VALID_ROUND_ORDER_MODES = new Set([
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getAuthenticatedSession(request);
-    if (!session) {
-      return unauthorizedResponse();
-    }
-
     // 自动将 24 小时无活动的房间标记为已结束
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     await prisma.room.updateMany({

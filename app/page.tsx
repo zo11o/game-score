@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api, getCurrentUser, isUnauthorizedError } from '@/lib/api';
+import { api, getCurrentUser, isUnauthorizedError, setCurrentUser } from '@/lib/api';
 import { ROUND_ORDER_MODE_LABELS } from '@/lib/round-order';
+import { PageHeader } from '@/components/page-header';
+import { AuthModal } from '@/components/auth-modal';
 import type { Room, RoundOrderMode, User } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import {
@@ -32,10 +34,13 @@ export default function Home() {
   const createRoomModal = useDisclosure();
   const joinRoomModal = useDisclosure();
   const errorModal = useDisclosure();
+  const authModal = useDisclosure();
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
   const [createGameType, setCreateGameType] = useState<Room['gameType']>('classic');
   const [createRoundOrderMode, setCreateRoundOrderMode] = useState<RoundOrderMode>('rotate_by_player_number');
+  const [pendingAction, setPendingAction] = useState<'create' | 'join' | null>(null);
+  const [pendingRoom, setPendingRoom] = useState<Room | null>(null);
   const router = useRouter();
 
   const resetCreateRoomState = () => {
@@ -45,22 +50,15 @@ export default function Home() {
 
   useEffect(() => {
     const user = getCurrentUser();
-    if (!user) {
-      router.push('/login');
-      return;
-    }
     setCurrentUser(user);
     api.getRooms()
       .then(setRooms)
       .catch((err) => {
-        if (isUnauthorizedError(err)) {
-          router.push('/login');
-          return;
-        }
         console.error(err);
+        showError('获取房间列表失败');
       })
       .finally(() => setLoading(false));
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     let filtered = rooms;
@@ -82,9 +80,28 @@ export default function Home() {
     errorModal.onOpen();
   };
 
+  const handleAuthSuccess = (user: User) => {
+    setCurrentUser(user);
+    authModal.onClose();
+
+    if (pendingAction === 'create') {
+      createRoomModal.onOpen();
+    } else if (pendingAction === 'join' && pendingRoom) {
+      setSelectedRoom(pendingRoom);
+      joinRoomModal.onOpen();
+    }
+
+    setPendingAction(null);
+    setPendingRoom(null);
+  };
+
   const handleCreateRoom = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!currentUser) return;
+    if (!currentUser) {
+      setPendingAction('create');
+      authModal.onOpen();
+      return;
+    }
 
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
@@ -104,7 +121,8 @@ export default function Home() {
       router.push(`/room/${room.id}`);
     } catch (err) {
       if (isUnauthorizedError(err)) {
-        router.push('/login');
+        setPendingAction('create');
+        authModal.onOpen();
         return;
       }
       showError(err instanceof Error ? err.message : '创建失败');
@@ -125,7 +143,9 @@ export default function Home() {
       router.push(`/room/${selectedRoom.id}`);
     } catch (err) {
       if (isUnauthorizedError(err)) {
-        router.push('/login');
+        setPendingRoom(selectedRoom);
+        setPendingAction('join');
+        authModal.onOpen();
         return;
       }
       showError(err instanceof Error ? err.message : '加入失败');
@@ -133,18 +153,23 @@ export default function Home() {
   };
 
   const handleRoomSelect = (room: Room) => {
-    const alreadyJoined = !!currentUser && room.users.includes(currentUser.id);
+    const alreadyJoined = currentUser ? room.users.includes(currentUser.id) : false;
 
     if (alreadyJoined) {
       router.push(`/room/${room.id}`);
       return;
     }
 
+    if (!currentUser) {
+      setPendingRoom(room);
+      setPendingAction('join');
+      authModal.onOpen();
+      return;
+    }
+
     setSelectedRoom(room);
     joinRoomModal.onOpen();
   };
-
-  if (!currentUser) return null;
 
   if (loading) {
     return (
@@ -157,45 +182,54 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 pb-24">
       <div className="max-w-6xl mx-auto p-6">
-        <div className="flex justify-between items-center mb-8 gap-4">
-          <h1 className="text-4xl font-bold neon-glow text-purple-400 whitespace-nowrap">游戏大厅</h1>
+        <PageHeader
+          title="游戏大厅"
+          actions={(
+            <div
+              className={`transition-all duration-300 ease-out ${
+                isSearchFocused ? 'w-full max-w-md' : 'w-full sm:w-48'
+              }`}
+            >
+              <Input
+                placeholder="搜索房间号/创建者/房间名"
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+                isClearable
+                onClear={() => setSearchQuery('')}
+                startContent={
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-5 h-5 text-purple-400"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+                    />
+                  </svg>
+                }
+                classNames={{
+                  base: 'max-w-full',
+                  inputWrapper: 'bg-slate-800/50 border border-purple-500/30 hover:border-purple-500/50 focus-within:border-purple-500 transition-all',
+                }}
+              />
+            </div>
+          )}
+        />
 
-          <div
-            className={`transition-all duration-300 ease-out ${
-              isSearchFocused ? 'w-full max-w-md' : 'w-48'
-            }`}
-          >
-            <Input
-              placeholder="搜索房间号/创建者/房间名"
-              value={searchQuery}
-              onValueChange={setSearchQuery}
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => setIsSearchFocused(false)}
-              isClearable
-              onClear={() => setSearchQuery('')}
-              startContent={
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-5 h-5 text-purple-400"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-                  />
-                </svg>
-              }
-              classNames={{
-                base: 'max-w-full',
-                inputWrapper: 'bg-slate-800/50 border border-purple-500/30 hover:border-purple-500/50 focus-within:border-purple-500 transition-all',
-              }}
-            />
+        {!currentUser && (
+          <div className="mb-4 rounded-lg bg-purple-500/10 border border-purple-500/30 px-4 py-3 text-center">
+            <p className="text-sm text-purple-300">
+              浏览房间无需登录，创建或加入房间需要登录账号
+            </p>
           </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
           {filteredRooms.map((room) => (
@@ -421,7 +455,14 @@ export default function Home() {
 
             <button
               aria-label="创建房间"
-              onClick={createRoomModal.onOpen}
+              onClick={() => {
+                if (!currentUser) {
+                  setPendingAction('create');
+                  authModal.onOpen();
+                } else {
+                  createRoomModal.onOpen();
+                }
+              }}
               className="flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors hover:bg-purple-500/10"
             >
               <div className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center -mt-6 shadow-lg">
@@ -441,7 +482,13 @@ export default function Home() {
 
             <button
               aria-label="用户中心"
-              onClick={() => router.push('/profile')}
+              onClick={() => {
+                if (!currentUser) {
+                  authModal.onOpen();
+                } else {
+                  router.push('/profile');
+                }
+              }}
               className="flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors hover:bg-purple-500/10"
             >
               <svg
@@ -486,6 +533,16 @@ export default function Home() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      <AuthModal
+        isOpen={authModal.isOpen}
+        onClose={() => {
+          authModal.onClose();
+          setPendingAction(null);
+          setPendingRoom(null);
+        }}
+        onSuccess={handleAuthSuccess}
+      />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   ROUND_ORDER_MODE_LABELS,
 } from '@/lib/round-order';
 import { useRoomSocket } from '@/lib/use-room-socket';
+import { PageHeader } from '@/components/page-header';
 import type {
   CurrentRound,
   DealAllocation,
@@ -379,12 +380,11 @@ function HandStrip({
 
   return (
     <div className="mt-3 w-full">
-      <p className="text-[11px] text-slate-400 text-center mb-2">本轮手牌</p>
-      {isSelf && hasPeeked && visibleCount > 0 && showInteractionHint && (
-        <p className="mb-2 text-[10px] text-center text-amber-300/80">
-          双击卡牌可亮牌或扣回
-        </p>
-      )}
+      <p className="text-[11px] text-slate-400 text-center mb-2">
+        {isSelf && hasPeeked && visibleCount > 0 && showInteractionHint
+          ? '双击卡牌可亮牌或扣回'
+          : '本轮手牌'}
+      </p>
       {hasCards ? (
         <div className="flex flex-wrap justify-center gap-2">
           {hasPeeked &&
@@ -1132,10 +1132,13 @@ export default function RoomPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 sm:p-6">
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 max-w-7xl mx-auto">
         <div className="flex-1 min-w-0">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl sm:text-4xl font-bold text-purple-400">{room.name}</h1>
+          <PageHeader
+            title={room.name}
+            subtitle={`房间号 #${room.roomNumber} · 房主: ${room.creatorName}`}
+            showBackButton
+            showHomeButton
+            titleSuffix={(
+              <>
                 {room.status === 'finished' && (
                   <Chip color="danger" variant="flat">已结束</Chip>
                 )}
@@ -1145,69 +1148,61 @@ export default function RoomPage() {
                 <Chip variant="flat" color={room.gameType === 'poker_rounds' ? 'secondary' : 'default'}>
                   {GAME_TYPE_LABELS[room.gameType]}
                 </Chip>
+              </>
+            )}
+            actions={(
+              <div className="flex flex-wrap gap-2">
+                {isPokerRoom && room.status === 'active' && isOwner && (
+                  <Button
+                    color="secondary"
+                    variant="shadow"
+                    onPress={openDealModal}
+                    className="whitespace-nowrap"
+                  >
+                    {currentRound ? '发下一轮' : '开始第一轮'}
+                  </Button>
+                )}
+                {room.status === 'active' && (
+                  <Button
+                    color="danger"
+                    variant="flat"
+                    onPress={handleFinishRoom}
+                    className="whitespace-nowrap"
+                  >
+                    结束游戏
+                  </Button>
+                )}
               </div>
-              <p className="text-slate-400 mt-1 sm:mt-2 text-sm sm:text-base">
-                房间号 #{room.roomNumber} · 房主: {room.creatorName}
-              </p>
-              {isPokerRoom && (
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <Chip color="warning" variant="flat">
-                    {currentRound ? `第 ${currentRound.roundNumber} 轮` : '未发牌'}
-                  </Chip>
-                  <Chip color="secondary" variant="flat">
-                    顺序规则：{ROUND_ORDER_MODE_LABELS[room.roundOrderMode]}
-                  </Chip>
-                  {currentRound && (
-                    <span className="text-xs sm:text-sm text-slate-400">
-                      最近发牌: {formatTime(currentRound.dealtAt)}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-3 rounded-2xl border border-pink-500/30 bg-slate-900/70 px-4 py-3">
-                    <div ref={deckRef} className="relative h-20 w-14 shrink-0">
-                      <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-lg border border-purple-500/20 bg-slate-950/60" />
-                      <CardBack className="absolute inset-0" />
-                    </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-pink-300/70">公共牌堆</p>
-                      <p className="text-sm font-semibold text-slate-100">
-                        {currentRound ? `剩余 ${currentRound.remainingCardCount} 张` : '等待房主发牌'}
-                      </p>
-                    </div>
+            )}
+            contentBelow={isPokerRoom ? (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Chip color="warning" variant="flat">
+                  {currentRound ? `第 ${currentRound.roundNumber} 轮` : '未发牌'}
+                </Chip>
+                <Chip color="secondary" variant="flat">
+                  顺序规则：{ROUND_ORDER_MODE_LABELS[room.roundOrderMode]}
+                </Chip>
+                {currentRound && (
+                  <span className="text-xs sm:text-sm text-slate-400">
+                    最近发牌: {formatTime(currentRound.dealtAt)}
+                  </span>
+                )}
+                <div className="flex items-center gap-3 rounded-2xl border border-pink-500/30 bg-slate-900/70 px-4 py-3">
+                  <div ref={deckRef} className="relative h-20 w-14 shrink-0">
+                    <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-lg border border-purple-500/20 bg-slate-950/60" />
+                    <CardBack className="absolute inset-0" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-pink-300/70">公共牌堆</p>
+                    <p className="text-sm font-semibold text-slate-100">
+                      {currentRound ? `剩余 ${currentRound.remainingCardCount} 张` : '等待房主发牌'}
+                    </p>
                   </div>
                 </div>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {isPokerRoom && room.status === 'active' && isOwner && (
-                <Button
-                  color="secondary"
-                  variant="shadow"
-                  onPress={openDealModal}
-                  className="whitespace-nowrap"
-                >
-                  {currentRound ? '发下一轮' : '开始第一轮'}
-                </Button>
-              )}
-              {room.status === 'active' && (
-                <Button
-                  color="danger"
-                  variant="flat"
-                  onPress={handleFinishRoom}
-                  className="whitespace-nowrap"
-                >
-                  结束游戏
-                </Button>
-              )}
-              <Button
-                color="default"
-                variant="flat"
-                onPress={() => router.push('/')}
-                className="whitespace-nowrap"
-              >
-                返回大厅
-              </Button>
-            </div>
-          </div>
+              </div>
+            ) : undefined}
+            className="mb-6"
+          />
 
           <div className="flex flex-wrap gap-4 sm:gap-6">
             {orderedUsers.map((user) => renderUserCard(user))}
