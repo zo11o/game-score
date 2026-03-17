@@ -304,6 +304,32 @@ export function getOpenApiDocument(serverUrl?: string) {
           },
         },
       },
+      '/api/rooms/{id}/rounds/peek': {
+        post: {
+          tags: ['Rooms'],
+          summary: '查看自己当前轮的手牌',
+          security: authSecurity,
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              description: '房间 ID',
+              schema: {
+                type: 'string',
+              },
+            },
+          ],
+          responses: {
+            '200': success(ref('PeekHandPayload'), '看牌成功'),
+            '400': error(400, '当前还没有开始发牌'),
+            '401': error(401, '登录已失效，请重新登录'),
+            '403': error(403, '你还不是该房间成员'),
+            '404': error(404, '房间不存在'),
+            '500': error(500, '看牌失败，请重试'),
+          },
+        },
+      },
       '/api/rooms/{id}/rounds/cards/toggle': {
         post: {
           tags: ['Rooms'],
@@ -916,6 +942,20 @@ export function getOpenApiDocument(serverUrl?: string) {
             drawId: {
               type: 'string',
               example: '8be7fe48-bd55-4d48-a8a8-2d6312d35d66',
+            },
+            roundNumber: {
+              type: 'integer',
+              example: 2,
+            },
+          },
+        },
+        PeekHandPayload: {
+          type: 'object',
+          required: ['success', 'roundNumber'],
+          properties: {
+            success: {
+              type: 'boolean',
+              example: true,
             },
             roundNumber: {
               type: 'integer',

@@ -5,6 +5,7 @@ import { getOrCreateSystemUser, INITIAL_SCORE } from '@/lib/system-user';
 import { serializeRoom } from '@/lib/room-response';
 import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
 
+const DEFAULT_ROOM_PASSWORD = '123';
 const VALID_GAME_TYPES = new Set(['classic', 'poker_rounds']);
 const VALID_ROUND_ORDER_MODES = new Set([
   'rotate_by_player_number',
@@ -13,7 +14,7 @@ const VALID_ROUND_ORDER_MODES = new Set([
   'owner_sets_first_player',
 ]);
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // 自动将 24 小时无活动的房间标记为已结束
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -68,9 +69,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, password, gameType, roundOrderMode } = await request.json();
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    const normalizedPassword =
+      typeof password === 'string' && password.trim() ? password.trim() : DEFAULT_ROOM_PASSWORD;
 
-    if (!name || !password) {
-      return errorResponse('房间名称和密码不能为空', 400);
+    if (!normalizedName) {
+      return errorResponse('房间名称不能为空', 400);
     }
 
     if (gameType && !VALID_GAME_TYPES.has(gameType)) {
@@ -78,17 +82,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (gameType === 'poker_rounds' && !roundOrderMode) {
-      return NextResponse.json(
-        { error: '扑克轮次房间需要选择每轮顺序规则' },
-        { status: 400 }
-      );
+      return errorResponse('扑克轮次房间需要选择每轮顺序规则', 400);
     }
 
     if (roundOrderMode && !VALID_ROUND_ORDER_MODES.has(roundOrderMode)) {
-      return NextResponse.json(
-        { error: '不支持的轮次顺序规则' },
-        { status: 400 }
-      );
+      return errorResponse('不支持的轮次顺序规则', 400);
     }
 
     // Get the next room number
@@ -100,8 +98,8 @@ export async function POST(request: NextRequest) {
 
     const room = await prisma.room.create({
       data: {
-        name,
-        password,
+        name: normalizedName,
+        password: normalizedPassword,
         status: 'active',
         roomNumber: nextRoomNumber,
         creatorId: session.user.id,

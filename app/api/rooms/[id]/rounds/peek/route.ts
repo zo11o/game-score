@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { parseStringArrayJson, stringifyStringArray } from '@/lib/round-state';
 import { broadcastRoomUpdate } from '@/lib/room-events';
@@ -97,19 +98,16 @@ export async function POST(
 
     broadcastRoomUpdate(result.roomId);
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       roundNumber: result.roundNumber,
-    });
+    }, '看牌成功');
   } catch (err) {
     if (err instanceof PeekHandError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return errorResponse(err.message, err.status);
     }
 
     console.error('Peek hand error:', err);
-    return NextResponse.json(
-      { error: '看牌失败，请重试' },
-      { status: 500 }
-    );
+    return errorResponse('看牌失败，请重试', 500);
   }
 }

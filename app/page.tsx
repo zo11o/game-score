@@ -316,11 +316,13 @@ export default function Home() {
                 <Input
                   name="password"
                   type="password"
-                  isRequired
-                  placeholder="请输入密码"
+                  placeholder="留空则默认 123"
                   aria-label="房间密码"
                   classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
                 />
+                <p className="text-xs text-slate-500">
+                  不填密码时，系统会自动使用默认房间密码 123。
+                </p>
                 <Select
                   name="gameType"
                   label="游戏类型"
