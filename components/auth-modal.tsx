@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { api, setCurrentUser } from '@/lib/api';
+import { generateNickname } from '@/lib/nickname-generator';
 import type { User } from '@/lib/types';
 import {
   Modal,
@@ -43,6 +44,10 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
     onClose();
   };
 
+  const handleRandomNickname = () => {
+    setName(generateNickname());
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -62,13 +67,8 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
 
     try {
       if (isRegister) {
-        if (!name.trim()) {
-          setErrorMessage('请输入昵称');
-          setLoading(false);
-          return;
-        }
-
-        const user = await api.register(email, password, name.trim());
+        // 昵称可选，未填写时由后端自动生成
+        const user = await api.register(email, password, name.trim() || undefined);
         setCurrentUser(user);
         resetForm();
         onSuccess(user);
@@ -134,16 +134,27 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
               autoComplete={isRegister ? 'new-password' : 'current-password'}
             />
             {isRegister && (
-              <Input
-                type="text"
-                value={name}
-                onValueChange={setName}
-                isRequired={isRegister}
-                placeholder="请输入昵称"
-                aria-label="昵称"
-                classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
-                autoComplete="name"
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  value={name}
+                  onValueChange={setName}
+                  placeholder="请输入昵称（可选，留空自动生成）"
+                  aria-label="昵称"
+                  classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
+                  autoComplete="name"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="flat"
+                  color="secondary"
+                  onPress={handleRandomNickname}
+                  className="shrink-0"
+                >
+                  随机
+                </Button>
+              </div>
             )}
           </ModalBody>
           <ModalFooter className="flex-col gap-2">

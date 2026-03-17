@@ -8,6 +8,10 @@ vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
 }));
 
+vi.mock('@/lib/nickname-generator', () => ({
+  generateNickname: vi.fn(() => '勇敢的熊猫'),
+}));
+
 vi.mock('@/lib/api', () => ({
   getCurrentUser: vi.fn(),
   isUnauthorizedError: vi.fn(() => false),
@@ -62,7 +66,8 @@ describe('Login Page', () => {
 
     fireEvent.click(screen.getByText('没有账号？去注册'));
     expect(screen.getByText('注册')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('请输入昵称')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('请输入昵称（可选，留空自动生成）')).toBeInTheDocument();
+    expect(screen.getByText('随机')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('已有账号？去登录'));
     expect(screen.getByText('登录')).toBeInTheDocument();
@@ -77,7 +82,7 @@ describe('Login Page', () => {
 
     const emailInput = screen.getByPlaceholderText('请输入邮箱');
     const passwordInput = screen.getByPlaceholderText('请输入密码（至少 6 位）');
-    const nameInput = screen.getByPlaceholderText('请输入昵称');
+    const nameInput = screen.getByPlaceholderText('请输入昵称（可选，留空自动生成）');
 
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
     fireEvent.change(passwordInput, { target: { value: 'password123' } });
@@ -102,7 +107,7 @@ describe('Login Page', () => {
 
     const emailInput = screen.getByPlaceholderText('请输入邮箱');
     const passwordInput = screen.getByPlaceholderText('请输入密码（至少 6 位）');
-    const nameInput = screen.getByPlaceholderText('请输入昵称');
+    const nameInput = screen.getByPlaceholderText('请输入昵称（可选，留空自动生成）');
 
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
     fireEvent.change(passwordInput, { target: { value: 'password123' } });

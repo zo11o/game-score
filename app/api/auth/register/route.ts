@@ -3,13 +3,15 @@ import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { applySessionCookie, createSession } from '@/lib/session';
+import { generateNickname } from '@/lib/nickname-generator';
+import { generateAvatarUrl } from '@/lib/avatar-styles';
 
 export async function POST(request: NextRequest) {
   try {
     const { email, password, name } = await request.json();
 
-    if (!email || !password || !name) {
-      return errorResponse('邮箱、密码和昵称不能为空', 400);
+    if (!email || !password) {
+      return errorResponse('邮箱和密码不能为空', 400);
     }
 
     if (password.length < 6) {
@@ -26,13 +28,16 @@ export async function POST(request: NextRequest) {
       return errorResponse('该邮箱已被注册，请直接登录', 400);
     }
 
+    // 昵称可选，未提供时自动生成
+    const finalName = name?.trim() || generateNickname();
+
     const passwordHash = await hashPassword(password);
     const user = await prisma.user.create({
       data: {
         email: normalizedEmail,
         passwordHash,
-        name: name.trim(),
-        avatar: `https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(normalizedEmail)}`,
+        name: finalName,
+        avatar: generateAvatarUrl(normalizedEmail),
       },
     });
 

@@ -126,3 +126,13 @@ export interface RoomDetailsResponse {
   records: ScoreRecord[];
   currentRound: CurrentRound | null;
 }
+
+// 头像风格 ID
+export type AvatarStyleId = 'identicon' | 'bottts' | 'avataaars' | 'lorelei' | 'shapes' | 'initials';
+
+// 更新资料请求
+export interface UpdateProfileRequest {
+  name?: string;
+  avatarStyle?: AvatarStyleId;
+  avatarSeed?: string;
+}

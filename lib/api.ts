@@ -9,6 +9,7 @@ import type {
   RoomDetailsResponse,
   RoundOrderMode,
   ScoreRecord,
+  UpdateProfileRequest,
   User,
 } from './types';
 
@@ -56,7 +57,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  async register(email: string, password: string, name: string) {
+  async register(email: string, password: string, name?: string) {
     const data = await handleResponse<{ user: User }>(
       await fetch('/api/auth/register', {
         method: 'POST',
@@ -184,5 +185,16 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
       })
     );
+  },
+
+  async updateProfile(userId: string, data: UpdateProfileRequest): Promise<User> {
+    const responseData = await handleResponse<{ user: User }>(
+      await fetch(`/api/users/${userId}/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    );
+    return responseData.user;
   },
 };

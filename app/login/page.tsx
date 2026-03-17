@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { api, setCurrentUser } from '@/lib/api';
+import { generateNickname } from '@/lib/nickname-generator';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure } from '@heroui/react';
 
@@ -23,6 +24,10 @@ export default function Login() {
     setLoading(false);
   };
 
+  const handleRandomNickname = () => {
+    setName(generateNickname());
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -39,12 +44,8 @@ export default function Login() {
 
     try {
       if (isRegister) {
-        if (!name.trim()) {
-          showError('请输入昵称');
-          return;
-        }
-
-        const user = await api.register(email, password, name.trim());
+        // 昵称可选，未填写时由后端自动生成
+        const user = await api.register(email, password, name.trim() || undefined);
         setCurrentUser(user);
         router.push('/');
       } else {
@@ -83,15 +84,26 @@ export default function Login() {
             classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
           />
           {isRegister && (
-            <Input
-              type="text"
-              value={name}
-              onValueChange={setName}
-              isRequired={isRegister}
-              placeholder="请输入昵称"
-              aria-label="昵称"
-              classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
-            />
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                value={name}
+                onValueChange={setName}
+                placeholder="请输入昵称（可选，留空自动生成）"
+                aria-label="昵称"
+                classNames={{ inputWrapper: 'bg-emerald-50/70 border border-emerald-100' }}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="flat"
+                color="secondary"
+                onPress={handleRandomNickname}
+                className="shrink-0"
+              >
+                随机
+              </Button>
+            </div>
           )}
           <Button
             type="submit"
