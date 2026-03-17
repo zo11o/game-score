@@ -445,6 +445,8 @@ export default function RoomPage() {
   const [pendingDraws, setPendingDraws] = useState<RoomDrawEvent[]>([]);
   const [activeDraw, setActiveDraw] = useState<AnimatedDraw | null>(null);
   const [dealAnimations, setDealAnimations] = useState<DealAnimation[]>([]);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const deckRef = useRef<HTMLDivElement | null>(null);
   const playerAreaRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const queuedRoomDataRef = useRef<RoomDetailsResponse | null>(null);
@@ -452,9 +454,22 @@ export default function RoomPage() {
   const previousRoundNumberRef = useRef<number | null | undefined>(undefined);
   const recordsDrawer = useDisclosure();
   const dealRoundModal = useDisclosure();
+  const giveScoreModal = useDisclosure();
+  const errorModal = useDisclosure();
+  const successModal = useDisclosure();
   const router = useRouter();
   const params = useParams();
   const roomId = params.id as string;
+
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    errorModal.onOpen();
+  };
+
+  const showSuccess = (message: string) => {
+    setSuccessMessage(message);
+    successModal.onOpen();
+  };
 
   const setPlayerAreaRef = useCallback(
     (userId: string) => (node: HTMLDivElement | null) => {
@@ -724,7 +739,7 @@ export default function RoomPage() {
         router.push('/login');
         return;
       }
-      alert(err instanceof Error ? err.message : '添加分数失败');
+      showError(err instanceof Error ? err.message : '添加分数失败');
     }
   };
 
@@ -732,7 +747,7 @@ export default function RoomPage() {
     if (!room || !isOwner) return;
 
     if (roundTotal < 1 || roundTotal > 54) {
-      alert('本轮总发牌数必须在 1 到 54 张之间');
+      showError('本轮总发牌数必须在 1 到 54 张之间');
       return;
     }
 
@@ -751,7 +766,7 @@ export default function RoomPage() {
         router.push('/login');
         return;
       }
-      alert(err instanceof Error ? err.message : '发牌失败');
+      showError(err instanceof Error ? err.message : '发牌失败');
     }
   };
 
@@ -770,7 +785,7 @@ export default function RoomPage() {
         router.push('/login');
         return;
       }
-      alert(err instanceof Error ? err.message : '抽牌失败');
+      showError(err instanceof Error ? err.message : '抽牌失败');
     }
   };
 
@@ -789,7 +804,7 @@ export default function RoomPage() {
         router.push('/login');
         return;
       }
-      alert(err instanceof Error ? err.message : '翻牌失败');
+      showError(err instanceof Error ? err.message : '翻牌失败');
     } finally {
       setIsTogglingCard(false);
     }
@@ -800,14 +815,16 @@ export default function RoomPage() {
 
     try {
       await api.finishRoom(roomId);
-      alert('游戏已结束');
-      router.push('/');
+      showSuccess('游戏已结束');
+      setTimeout(() => {
+        router.push('/');
+      }, 1500);
     } catch (err) {
       if (isUnauthorizedError(err)) {
         router.push('/login');
         return;
       }
-      alert(err instanceof Error ? err.message : '结束游戏失败');
+      showError(err instanceof Error ? err.message : '结束游戏失败');
     }
   };
 
@@ -1289,6 +1306,52 @@ export default function RoomPage() {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      <Modal
+        isOpen={errorModal.isOpen}
+        onOpenChange={errorModal.onOpenChange}
+        placement="center"
+        backdrop="opaque"
+        classNames={{
+          base: '!bg-slate-800 border border-red-500/50',
+          backdrop: 'bg-black/70',
+        }}
+      >
+        <ModalContent className="!bg-slate-800 border border-red-500/50">
+          <ModalHeader className="flex flex-col gap-1 text-red-400">提示</ModalHeader>
+          <ModalBody>
+            <p className="text-slate-200">{errorMessage}</p>
+          </ModalBody>
+          <ModalFooter>
+            <Button color="danger" variant="light" onPress={errorModal.onClose}>
+              确定
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={successModal.isOpen}
+        onOpenChange={successModal.onOpenChange}
+        placement="center"
+        backdrop="opaque"
+        classNames={{
+          base: '!bg-slate-800 border border-green-500/50',
+          backdrop: 'bg-black/70',
+        }}
+      >
+        <ModalContent className="!bg-slate-800 border border-green-500/50">
+          <ModalHeader className="flex flex-col gap-1 text-green-400">成功</ModalHeader>
+          <ModalBody>
+            <p className="text-slate-200">{successMessage}</p>
+          </ModalBody>
+          <ModalFooter>
+            <Button color="success" variant="light" onPress={successModal.onClose}>
+              确定
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

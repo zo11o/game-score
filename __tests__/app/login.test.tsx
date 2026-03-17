@@ -93,7 +93,6 @@ describe('Login Page', () => {
   });
 
   it('should not register duplicate email', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     vi.mocked(api.register).mockRejectedValue(new Error('该邮箱已被注册，请直接登录'));
 
     render(<Login />);
@@ -111,11 +110,11 @@ describe('Login Page', () => {
     fireEvent.click(screen.getByText('注册'));
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('该邮箱已被注册，请直接登录');
+      expect(screen.getByText('提示')).toBeInTheDocument();
+      expect(screen.getByText('该邮箱已被注册，请直接登录')).toBeInTheDocument();
     });
 
     expect(mockPush).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
   });
 
   it('should login existing user successfully', async () => {
@@ -140,7 +139,6 @@ describe('Login Page', () => {
   });
 
   it('should not login non-existent email', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     vi.mocked(api.login).mockRejectedValue(new Error('该邮箱未注册，请先注册'));
 
     render(<Login />);
@@ -154,15 +152,14 @@ describe('Login Page', () => {
     fireEvent.click(screen.getByText('登录'));
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('该邮箱未注册，请先注册');
+      expect(screen.getByText('提示')).toBeInTheDocument();
+      expect(screen.getByText('该邮箱未注册，请先注册')).toBeInTheDocument();
     });
 
     expect(mockPush).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
   });
 
   it('should not login with wrong password', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     vi.mocked(api.login).mockRejectedValue(new Error('密码错误'));
 
     render(<Login />);
@@ -176,11 +173,11 @@ describe('Login Page', () => {
     fireEvent.click(screen.getByText('登录'));
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('密码错误');
+      expect(screen.getByText('提示')).toBeInTheDocument();
+      expect(screen.getByText('密码错误')).toBeInTheDocument();
     });
 
     expect(mockPush).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
   });
 
   it('should require email and password input', () => {

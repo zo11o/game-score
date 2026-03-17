@@ -27,8 +27,10 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
   const createRoomModal = useDisclosure();
   const joinRoomModal = useDisclosure();
+  const errorModal = useDisclosure();
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -67,6 +69,11 @@ export default function Home() {
     setFilteredRooms(filtered);
   }, [rooms, searchQuery]);
 
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    errorModal.onOpen();
+  };
+
   const handleCreateRoom = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -86,7 +93,7 @@ export default function Home() {
         router.push('/login');
         return;
       }
-      alert(err instanceof Error ? err.message : '创建失败');
+      showError(err instanceof Error ? err.message : '创建失败');
     }
   };
 
@@ -107,7 +114,7 @@ export default function Home() {
         router.push('/login');
         return;
       }
-      alert(err instanceof Error ? err.message : '加入失败');
+      showError(err instanceof Error ? err.message : '加入失败');
     }
   };
 
@@ -401,6 +408,29 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={errorModal.isOpen}
+        onOpenChange={errorModal.onOpenChange}
+        placement="center"
+        backdrop="opaque"
+        classNames={{
+          base: '!bg-slate-800 border border-red-500/50',
+          backdrop: 'bg-black/70',
+        }}
+      >
+        <ModalContent className="!bg-slate-800 border border-red-500/50">
+          <ModalHeader className="flex flex-col gap-1 text-red-400">提示</ModalHeader>
+          <ModalBody>
+            <p className="text-slate-200">{errorMessage}</p>
+          </ModalBody>
+          <ModalFooter>
+            <Button color="danger" variant="light" onPress={errorModal.onClose}>
+              确定
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

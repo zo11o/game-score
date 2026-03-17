@@ -94,7 +94,7 @@ describe('Home Page (Game Lobby)', () => {
     });
 
     expect(screen.getByText('👥 1 人')).toBeInTheDocument();
-    expect(screen.getByText('🔒 需要密码')).toBeInTheDocument();
+    expect(screen.getByText('🔒 需密码')).toBeInTheDocument();
   });
 
   it('should let an existing room member enter without password', async () => {
@@ -126,7 +126,7 @@ describe('Home Page (Game Lobby)', () => {
       expect(screen.getByText('Test Room')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('✅ 已加入，可直接进入')).toBeInTheDocument();
+    expect(screen.getByText('✅ 已加入')).toBeInTheDocument();
   });
 
   it('should open create room modal', async () => {
@@ -249,8 +249,6 @@ describe('Home Page (Game Lobby)', () => {
   });
 
   it('should not join room with incorrect password', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
     vi.mocked(getCurrentUser).mockReturnValue(mockUser);
     const room = buildRoom({ users: ['2'] });
     vi.mocked(api.getRooms).mockResolvedValue([room]);
@@ -271,11 +269,11 @@ describe('Home Page (Game Lobby)', () => {
     fireEvent.click(joinButton);
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('密码错误');
+      expect(screen.getByText('提示')).toBeInTheDocument();
+      expect(screen.getByText('密码错误')).toBeInTheDocument();
     });
 
     expect(mockPush).not.toHaveBeenCalledWith('/room/1');
-    alertSpy.mockRestore();
   });
 
   it('should navigate to profile page', async () => {

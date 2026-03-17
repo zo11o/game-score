@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { api, setCurrentUser } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { Button, Input, Spinner } from '@heroui/react';
+import { Button, Input, Spinner, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure } from '@heroui/react';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -13,29 +13,34 @@ export default function Login() {
   const [name, setName] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const errorModal = useDisclosure();
   const router = useRouter();
+
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    errorModal.onOpen();
+    setLoading(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     if (!EMAIL_REGEX.test(email)) {
-      alert('请输入有效的邮箱地址');
-      setLoading(false);
+      showError('请输入有效的邮箱地址');
       return;
     }
 
     if (password.length < 6) {
-      alert('密码至少需要 6 位');
-      setLoading(false);
+      showError('密码至少需要 6 位');
       return;
     }
 
     try {
       if (isRegister) {
         if (!name.trim()) {
-          alert('请输入昵称');
-          setLoading(false);
+          showError('请输入昵称');
           return;
         }
 
@@ -49,8 +54,7 @@ export default function Login() {
       }
     } catch (err) {
       console.error('登录/注册失败:', err);
-      alert(err instanceof Error ? err.message : '操作失败，请重试');
-      setLoading(false);
+      showError(err instanceof Error ? err.message : '操作失败，请重试');
     }
   };
 
@@ -107,6 +111,29 @@ export default function Login() {
           </Button>
         </form>
       </div>
+
+      <Modal
+        isOpen={errorModal.isOpen}
+        onOpenChange={errorModal.onOpenChange}
+        placement="center"
+        backdrop="opaque"
+        classNames={{
+          base: '!bg-slate-800 border border-red-500/50',
+          backdrop: 'bg-black/70',
+        }}
+      >
+        <ModalContent className="!bg-slate-800 border border-red-500/50">
+          <ModalHeader className="flex flex-col gap-1 text-red-400">提示</ModalHeader>
+          <ModalBody>
+            <p className="text-slate-200">{errorMessage}</p>
+          </ModalBody>
+          <ModalFooter>
+            <Button color="danger" variant="light" onPress={errorModal.onClose}>
+              确定
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }
