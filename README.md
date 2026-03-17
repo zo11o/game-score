@@ -1,35 +1,17 @@
 # 赛事记分工具
 
-面向 C 端用户的赛事记分工具，采用科技感 Retro-Futurism 设计风格。
-
-## 功能特性
-
-### 核心功能
-- ✅ 用户注册/登录系统
-- ✅ 游戏大厅（房间列表）
-- ✅ 创建房间（密码保护）
-- ✅ 加入房间
-- ✅ 房间内互相给分
-- ✅ 实时分数显示（WebSocket 同步，多人操作即时更新）
-- ✅ 用户中心
-- ✅ 数据持久化（SQLite 数据库）
-
-### 设计特点
-- 🎨 Retro-Futurism 科技感风格
-- 🌈 霓虹紫粉配色方案
-- ✨ CRT 扫描线效果
-- 🔤 Orbitron + Exo 2 字体组合
-- 📱 响应式设计
+面向 C 端用户的赛事记分工具，当前仓库已完成 `MVP v0.1`，支持用户登录、房间大厅、经典记分、扑克轮次房间、用户中心，以及基于 Socket.IO 的房间实时同步。
 
 ## 技术栈
 
-- **框架**: Next.js 16 (App Router)
-- **语言**: TypeScript
-- **样式**: Tailwind CSS 4
-- **测试**: Vitest + Testing Library
-- **数据**: Prisma + SQLite (数据库持久化)
+- Next.js 16 App Router
+- React 19
+- HeroUI + Tailwind CSS 4
+- Prisma + SQLite
+- Socket.IO
+- Vitest + Testing Library
 
-## 快速开始
+## 本地开发
 
 ### 安装依赖
 
@@ -37,200 +19,109 @@
 npm install
 ```
 
-### 数据库配置
+### 环境变量
 
-项目使用 SQLite 存储数据。首次运行前：
+创建 `.env` 文件：
 
-1. 创建 `.env` 文件，添加：
-   ```
-   DATABASE_URL="file:./dev.db"
-   ```
-2. 启动应用时会自动执行数据库迁移；如需手动执行，也可以运行：
-   ```bash
-   npx prisma migrate deploy
-   ```
+```env
+DATABASE_URL="file:./dev.db"
+```
 
-注意：Prisma Schema 位于 `prisma/schema.prisma`，所以这里的 SQLite 相对路径最终对应的实际文件是 `prisma/dev.db`。
+由于 Prisma schema 位于 `prisma/schema.prisma`，上面的相对路径最终对应数据库文件 `prisma/dev.db`。
 
-### 开发模式
+### 启动开发服务
 
 ```bash
 npm run dev
 ```
 
-访问 http://localhost:3000
+请不要直接运行 `next dev`。项目依赖自定义 `server.js` 挂载 Socket.IO，只有 `npm run dev` 和 `npm start` 会走正确的启动路径。
 
-API 文档入口：
+开发环境启动时会自动执行：
 
-- Swagger UI: http://localhost:3000/docs
-- OpenAPI JSON: http://localhost:3000/api/openapi
+- `prisma generate`
+- `prisma migrate deploy`
 
-> **注意**：实时同步依赖 WebSocket，必须使用 `npm run dev` 启动（会运行自定义服务器）。若使用 `npx next dev` 直接启动，则无法实时同步。
+访问入口：
 
-### 运行测试
+- 应用首页: [http://localhost:3000](http://localhost:3000)
+- Swagger UI: [http://localhost:3000/docs](http://localhost:3000/docs)
+- OpenAPI JSON: [http://localhost:3000/api/openapi](http://localhost:3000/api/openapi)
+
+## 测试与构建
 
 ```bash
-# 运行所有测试
 npm test
-
-# 监听模式
-npm run test:watch
-
-# 测试覆盖率
-npm run test:coverage
+npm run build
 ```
 
-### 构建生产版本
+常用命令：
 
 ```bash
-npm run build
-npm start
+npm run test:watch
+npm run test:coverage
+npx eslint .
 ```
 
-## 使用流程
+根据仓库约定，涉及 UI 变更时至少回归：
 
-### 1. 注册/登录
-- 首次使用：点击"去注册"，输入邮箱、密码和昵称创建账号
-- 再次使用：输入邮箱和密码登录
+- `__tests__/app/home.test.tsx`
+- `__tests__/app/login.test.tsx`
+- `__tests__/app/room.test.tsx`
 
-### 2. 游戏大厅
-- 查看所有房间列表
-- 点击"创建房间"按钮创建新房间
-- 点击房间卡片加入已有房间
+## 生产部署架构
 
-### 3. 房间内
-- 查看所有用户头像和当前分数
-- 点击其他用户头像给分
-- 输入分数（1-100）并确认
+生产部署维持当前架构，不改业务运行模式：
 
-### 4. 用户中心
-- 查看个人信息
-- 退出登录
+- GitHub 作为唯一代码仓库
+- GitHub Actions 负责 CI 和手动生产发布
+- VPS 运行 Node.js + PM2 + Nginx
+- SQLite 数据库存放在服务器本地 `prisma/data/prod.db`
 
-## 测试覆盖
+服务进程继续使用 `ecosystem.config.js`，部署脚本位于 `deploy/deploy.sh`。
 
-### 单元测试
-- ✅ 类型定义（3 个测试）
-- ✅ 登录页面功能（8 个测试）
-- ✅ 游戏大厅功能（9 个测试）
-- ✅ 房间页面功能（10 个测试）
+更详细的部署说明见：
 
-**总计**: 30 个测试用例，100% 通过
+- [部署说明](deploy/README.md)
+- [GitHub 初始化说明](docs/github-setup.md)
 
-### 测试内容
-- 用户管理（增删改查）
-- 房间管理（创建、加入）
-- 分数管理（给分、计算）
-- 数据持久化
-- UI 交互流程
-- 表单验证
-- 错误处理
+## GitHub Actions
 
-## 项目结构
+仓库新增了两条工作流：
 
-```
-game-score/
-├── app/
-│   ├── api/                  # API 路由
-│   │   ├── auth/             # 注册、登录
-│   │   ├── rooms/            # 房间 CRUD、加入
-│   │   └── scores/           # 分数记录
-│   ├── login/
-│   │   └── page.tsx          # 登录/注册页面
-│   ├── profile/
-│   │   └── page.tsx          # 用户中心
-│   ├── room/
-│   │   └── [id]/
-│   │       └── page.tsx      # 房间详情页
-│   ├── page.tsx              # 游戏大厅
-│   ├── layout.tsx            # 根布局
-│   └── globals.css           # 全局样式
-├── lib/
-│   ├── api.ts                # 客户端 API 调用
-│   ├── auth.ts               # 服务端密码哈希
-│   ├── prisma.ts             # Prisma 客户端
-│   ├── types.ts              # 类型定义
-│   └── db.ts                 # 类型导出（兼容）
-├── prisma/
-│   ├── schema.prisma         # 数据库模型
-│   └── migrations/           # 迁移文件
-├── __tests__/
-│   ├── lib/
-│   │   └── db.test.ts        # 类型测试
-│   └── app/
-│       ├── login.test.tsx    # 登录测试
-│       ├── home.test.tsx     # 大厅测试
-│       └── room.test.tsx     # 房间测试
-├── vitest.config.ts          # 测试配置
-└── vitest.setup.ts           # 测试环境设置
+- `.github/workflows/ci.yml`
+  - 在 `pull_request` 和 `push` 到 `master` 时自动运行
+  - 执行 `npm ci`、`npx prisma generate`、`npm test`、`npm run build`
+- `.github/workflows/deploy.yml`
+  - 通过 `workflow_dispatch` 手动触发
+  - 仅允许从 `master` 发布
+  - 通过 SSH 登录 VPS 并执行服务器上的部署脚本
+  - 与 GitHub `production` environment 结合使用，保留部署审计记录
+
+## 关键目录
+
+```text
+app/                     页面与 API 路由
+components/              共享 UI 组件
+lib/                     鉴权、房间聚合、Socket 等共享逻辑
+prisma/                  Prisma schema 与 SQLite 数据文件
+deploy/                  服务器部署、备份、回滚脚本
+.github/workflows/       GitHub Actions 工作流
+__tests__/               应用与共享逻辑测试
 ```
 
-## 数据模型
+## 运行约定
 
-### User (用户)
-```typescript
-{
-  id: string;
-  email: string;
-  name: string;
-  avatar: string;
-}
-```
+- 默认开发分支为 `master`
+- 业务写操作如果影响房间详情，需要补对应广播
+- 房间页动画不要把“首次加载已有轮次”误判成“进入新一轮”
+- 生产环境统一从 GitHub 仓库拉取代码，不再维护第二主仓库
 
-### Room (房间)
-```typescript
-{
-  id: string;
-  name: string;
-  password: string;
-  createdAt: number;
-  users: string[];
-}
-```
+## 故障排查
 
-### Score (分数记录)
-```typescript
-{
-  id: string;
-  roomId: string;
-  fromUserId: string;
-  toUserId: string;
-  points: number;
-  timestamp: number;
-}
-```
-
-## 设计系统
-
-### 配色方案
-- Primary: `#2563EB` (蓝色)
-- Secondary: `#3B82F6` (浅蓝)
-- CTA: `#F97316` (橙色)
-- Neon Purple: `#A855F7`
-- Neon Pink: `#EC4899`
-- Background: `#0a0a0a` (深黑)
-
-### 字体
-- 标题: Orbitron (科技感)
-- 正文: Exo 2 (未来感)
-
-### 特效
-- 霓虹发光 (text-shadow)
-- CRT 扫描线 (repeating-linear-gradient)
-- 玻璃态背景 (backdrop-blur)
-- 渐变边框 (border-gradient)
-
-## 浏览器兼容性
-
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
-
-## 注意事项
-
-- 数据存储在浏览器 localStorage，清除浏览器数据会丢失所有记录
-- 不同浏览器的数据不互通
-- 建议使用现代浏览器以获得最佳体验
+- WebSocket 不工作时，先确认是否通过 `npm run dev` 或 `npm start` 启动
+- Prisma 报错时，先检查 `.env` 中的 `DATABASE_URL`
+- 生产部署失败时，先查看 GitHub Actions 日志，再在服务器上检查 `pm2 logs game-score`
 
 ## License
 
