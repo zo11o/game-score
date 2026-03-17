@@ -60,6 +60,11 @@ npm run dev
 
 访问 http://localhost:3000
 
+API 文档入口：
+
+- Swagger UI: http://localhost:3000/docs
+- OpenAPI JSON: http://localhost:3000/api/openapi
+
 > **注意**：实时同步依赖 WebSocket，必须使用 `npm run dev` 启动（会运行自定义服务器）。若使用 `npx next dev` 直接启动，则无法实时同步。
 
 ### 运行测试
