@@ -28,7 +28,7 @@ export async function GET(
           },
         },
         members: {
-          orderBy: { id: 'asc' },
+          orderBy: { playerNumber: 'asc' },
           include: {
             user: {
               select: {
@@ -102,6 +102,11 @@ export async function GET(
       if (round) {
         const participantIds = new Set(parseStringArrayJson(round.participantUserIdsJson));
         const remainingDeck = parseStringArrayJson(round.remainingDeckJson);
+        const turnOrderUserIds = parseStringArrayJson(round.turnOrderUserIdsJson);
+        const normalizedTurnOrderUserIds =
+          turnOrderUserIds.length > 0
+            ? turnOrderUserIds
+            : room.members.map((member) => member.userId);
         const cardsByUser = new Map<string, typeof round.cards>();
         room.members.forEach((member) => {
           cardsByUser.set(member.userId, []);
@@ -117,6 +122,7 @@ export async function GET(
           roundNumber: round.roundNumber,
           dealtAt: round.createdAt.getTime(),
           remainingCardCount: remainingDeck.length,
+          turnOrderUserIds: normalizedTurnOrderUserIds,
           hands: room.members.map((member) => {
             const userCards = cardsByUser.get(member.userId) ?? [];
             const visibleCards =
@@ -150,6 +156,7 @@ export async function GET(
         email: m.user.email,
         name: m.user.name,
         avatar: m.user.avatar,
+        playerNumber: m.playerNumber,
       })),
       scores: userScores,
       records,

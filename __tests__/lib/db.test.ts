@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { User, Room, Score } from '@/lib/types';
+import type { Room, Score, User } from '@/lib/types';
 
 // 类型定义测试 - 数据持久化已迁移到 Prisma + SQLite
 // 实际数据库逻辑由 API 路由和 Prisma 处理
@@ -26,6 +26,7 @@ describe('Types', () => {
       creatorId: 'user1',
       creatorName: 'Test User',
       gameType: 'classic',
+      roundOrderMode: 'rotate_by_player_number',
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
       currentRoundNumber: null,

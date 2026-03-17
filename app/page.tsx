@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { api, getCurrentUser, isUnauthorizedError } from '@/lib/api';
-import type { Room, User } from '@/lib/types';
+import { ROUND_ORDER_MODE_LABELS } from '@/lib/round-order';
+import type { Room, RoundOrderMode, User } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import {
   Modal,
@@ -33,7 +34,14 @@ export default function Home() {
   const errorModal = useDisclosure();
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
+  const [createGameType, setCreateGameType] = useState<Room['gameType']>('classic');
+  const [createRoundOrderMode, setCreateRoundOrderMode] = useState<RoundOrderMode>('rotate_by_player_number');
   const router = useRouter();
+
+  const resetCreateRoomState = () => {
+    setCreateGameType('classic');
+    setCreateRoundOrderMode('rotate_by_player_number');
+  };
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -81,12 +89,18 @@ export default function Home() {
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
     const password = formData.get('password') as string;
-    const gameType = (formData.get('gameType') as Room['gameType']) || 'classic';
+    const gameType = createGameType;
 
     try {
-      const room = await api.createRoom(name, password, gameType);
+      const room = await api.createRoom(
+        name,
+        password,
+        gameType,
+        gameType === 'poker_rounds' ? createRoundOrderMode : undefined
+      );
       setRooms((prev) => [room, ...prev]);
       createRoomModal.onClose();
+      resetCreateRoomState();
       router.push(`/room/${room.id}`);
     } catch (err) {
       if (isUnauthorizedError(err)) {
@@ -229,7 +243,12 @@ export default function Home() {
 
         <Modal
           isOpen={createRoomModal.isOpen}
-          onOpenChange={createRoomModal.onOpenChange}
+          onOpenChange={() => {
+            if (createRoomModal.isOpen) {
+              resetCreateRoomState();
+            }
+            createRoomModal.onOpenChange();
+          }}
           placement="center"
           backdrop="opaque"
           classNames={{
@@ -265,16 +284,52 @@ export default function Home() {
                   <select
                     name="gameType"
                     aria-label="游戏类型"
-                    defaultValue="classic"
+                    value={createGameType}
+                    onChange={(event) => {
+                      const nextGameType = event.target.value as Room['gameType'];
+                      setCreateGameType(nextGameType);
+                      if (nextGameType === 'classic') {
+                        setCreateRoundOrderMode('rotate_by_player_number');
+                      }
+                    }}
                     className="w-full rounded-xl border border-purple-500/30 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-purple-400"
                   >
                     <option value="classic">经典记分</option>
                     <option value="poker_rounds">扑克轮次</option>
                   </select>
                 </label>
+                {createGameType === 'poker_rounds' && (
+                  <label className="space-y-2 text-sm text-slate-200">
+                    <span className="block text-sm font-medium text-slate-300">每轮顺序规则</span>
+                    <select
+                      name="roundOrderMode"
+                      aria-label="每轮顺序规则"
+                      value={createRoundOrderMode}
+                      onChange={(event) => setCreateRoundOrderMode(event.target.value as RoundOrderMode)}
+                      className="w-full rounded-xl border border-purple-500/30 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-purple-400"
+                    >
+                      {Object.entries(ROUND_ORDER_MODE_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500">
+                      房主可在后续轮次里按该规则确定每位玩家的出场顺序。
+                    </p>
+                  </label>
+                )}
               </ModalBody>
               <ModalFooter>
-                <Button variant="light" type="button" onPress={createRoomModal.onClose} className="whitespace-nowrap">
+                <Button
+                  variant="light"
+                  type="button"
+                  onPress={() => {
+                    resetCreateRoomState();
+                    createRoomModal.onClose();
+                  }}
+                  className="whitespace-nowrap"
+                >
                   取消
                 </Button>
                 <Button color="secondary" type="submit" className="whitespace-nowrap">

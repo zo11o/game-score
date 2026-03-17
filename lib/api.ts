@@ -2,9 +2,11 @@
 
 import type {
   DealAllocation,
+  DealRoundPayload,
   ParticipationHistory,
   Room,
   RoomDetailsResponse,
+  RoundOrderMode,
   ScoreRecord,
   User,
 } from './types';
@@ -79,12 +81,17 @@ export const api = {
     return handleResponse(await fetch('/api/rooms'));
   },
 
-  async createRoom(name: string, password: string, gameType: Room['gameType']) {
+  async createRoom(
+    name: string,
+    password: string,
+    gameType: Room['gameType'],
+    roundOrderMode?: RoundOrderMode
+  ) {
     const data = await handleResponse<{ room: Room }>(
       await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, password, gameType }),
+        body: JSON.stringify({ name, password, gameType, roundOrderMode }),
       })
     );
     return data.room;
@@ -123,12 +130,16 @@ export const api = {
     );
   },
 
-  async dealRound(roomId: string, allocations: DealAllocation[]) {
+  async dealRound(roomId: string, payload: DealRoundPayload | DealAllocation[]) {
+    const normalizedPayload = Array.isArray(payload)
+      ? { allocations: payload }
+      : payload;
+
     return handleResponse(
       await fetch(`/api/rooms/${roomId}/rounds`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ allocations }),
+        body: JSON.stringify(normalizedPayload),
       })
     );
   },

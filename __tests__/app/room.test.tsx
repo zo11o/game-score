@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { useRouter, useParams } from 'next/navigation';
 import RoomPage from '@/app/room/[id]/page';
 import { getCurrentUser, isUnauthorizedError, api } from '@/lib/api';
-import type { User } from '@/lib/types';
+import type { CurrentRound, RoomUser, User } from '@/lib/types';
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
@@ -45,6 +45,14 @@ describe('Room Page', () => {
     name: 'User2',
     avatar: 'https://example.com/avatar2.png',
   };
+  const mockRoomUser1: RoomUser = {
+    ...mockUser1,
+    playerNumber: 1,
+  };
+  const mockRoomUser2: RoomUser = {
+    ...mockUser2,
+    playerNumber: 2,
+  };
   const buildRoom = (overrides: Record<string, unknown> = {}) => ({
     id: 'room1',
     name: 'Test Room',
@@ -54,10 +62,32 @@ describe('Room Page', () => {
     creatorId: '1',
     creatorName: 'User1',
     gameType: 'classic' as const,
+    roundOrderMode: 'rotate_by_player_number' as const,
     createdAt: Date.now(),
     lastActivityAt: Date.now(),
     currentRoundNumber: null,
     users: ['1', '2'],
+    ...overrides,
+  });
+  const buildRound = (overrides: Partial<CurrentRound> = {}): CurrentRound => ({
+    roundNumber: 1,
+    dealtAt: Date.now(),
+    remainingCardCount: 53,
+    turnOrderUserIds: ['1', '2'],
+    hands: [
+      {
+        userId: '1',
+        visibleCards: [],
+        hiddenCount: 0,
+        isParticipant: true,
+      },
+      {
+        userId: '2',
+        visibleCards: [],
+        hiddenCount: 0,
+        isParticipant: true,
+      },
+    ],
     ...overrides,
   });
 
@@ -70,7 +100,7 @@ describe('Room Page', () => {
     vi.mocked(isUnauthorizedError).mockReturnValue(false);
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom(),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: {},
       records: [],
       currentRound: null,
@@ -106,10 +136,13 @@ describe('Room Page', () => {
     expect(screen.getByText('User2')).toBeInTheDocument();
   });
 
-  it('should always place the current user first', async () => {
+  it('should render players by player number order', async () => {
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom({ users: ['2', '1'] }),
-      users: [mockUser2, mockUser1],
+      users: [
+        { ...mockRoomUser2, playerNumber: 2 },
+        { ...mockRoomUser1, playerNumber: 1 },
+      ],
       scores: {},
       records: [],
       currentRound: null,
@@ -127,12 +160,14 @@ describe('Room Page', () => {
       .map((element) => element.textContent);
 
     expect(orderedUsers).toEqual(['User1', 'User2']);
+    expect(screen.getByText('玩家 1')).toBeInTheDocument();
+    expect(screen.getByText('玩家 2')).toBeInTheDocument();
   });
 
   it('should display user scores', async () => {
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom(),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: { '2': 10 },
       records: [],
       currentRound: null,
@@ -171,7 +206,7 @@ describe('Room Page', () => {
   it('should not open modal when clicking self', async () => {
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom({ users: ['1'] }),
-      users: [mockUser1],
+      users: [mockRoomUser1],
       scores: {},
       records: [],
       currentRound: null,
@@ -233,7 +268,7 @@ describe('Room Page', () => {
   it('should navigate back to lobby', async () => {
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom({ users: ['1'] }),
-      users: [mockUser1],
+      users: [mockRoomUser1],
       scores: {},
       records: [],
       currentRound: null,
@@ -256,13 +291,10 @@ describe('Room Page', () => {
         gameType: 'poker_rounds',
         currentRoundNumber: 1,
       }),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: { '1': 0, '2': 3 },
       records: [],
-      currentRound: {
-        roundNumber: 1,
-        dealtAt: Date.now(),
-        remainingCardCount: 53,
+      currentRound: buildRound({
         hands: [
           {
             userId: '1',
@@ -286,7 +318,7 @@ describe('Room Page', () => {
             isParticipant: true,
           },
         ],
-      },
+      }),
     });
 
     render(<RoomPage />);
@@ -296,6 +328,9 @@ describe('Room Page', () => {
     });
 
     expect(screen.getByText('第 1 轮')).toBeInTheDocument();
+    expect(screen.getByText('顺序规则：玩家号轮换')).toBeInTheDocument();
+    expect(screen.getByText('本轮第 1 位')).toBeInTheDocument();
+    expect(screen.getByText('本轮第 2 位')).toBeInTheDocument();
     expect(screen.getByText('剩余 53 张')).toBeInTheDocument();
     expect(screen.getAllByText('本轮手牌').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('?').length).toBeGreaterThanOrEqual(3);
@@ -308,7 +343,7 @@ describe('Room Page', () => {
         creatorId: '1',
         creatorName: 'User1',
       }),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: {},
       records: [],
       currentRound: null,
@@ -328,10 +363,87 @@ describe('Room Page', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认发牌' }));
 
     await waitFor(() => {
-      expect(api.dealRound).toHaveBeenCalledWith('room1', [
-        { userId: '1', cardCount: 2 },
-        { userId: '2', cardCount: 3 },
-      ]);
+      expect(api.dealRound).toHaveBeenCalledWith('room1', {
+        allocations: [
+          { userId: '1', cardCount: 2 },
+          { userId: '2', cardCount: 3 },
+        ],
+      });
+    });
+  });
+
+  it('should submit the full manual order from the second round', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        roundOrderMode: 'owner_sets_full_order',
+        creatorId: '1',
+        creatorName: 'User1',
+        currentRoundNumber: 1,
+      }),
+      users: [mockRoomUser1, mockRoomUser2],
+      scores: {},
+      records: [],
+      currentRound: buildRound(),
+    });
+    vi.mocked(api.dealRound).mockResolvedValue({ success: true } as never);
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '发下一轮' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '发下一轮' }));
+    fireEvent.click(screen.getByRole('button', { name: /玩家 2 User2/ }));
+    fireEvent.click(screen.getByRole('button', { name: /玩家 1 User1/ }));
+    fireEvent.click(screen.getByRole('button', { name: '确认发牌' }));
+
+    await waitFor(() => {
+      expect(api.dealRound).toHaveBeenCalledWith('room1', {
+        allocations: [
+          { userId: '1', cardCount: 7 },
+          { userId: '2', cardCount: 7 },
+        ],
+        orderedUserIds: ['2', '1'],
+      });
+    });
+  });
+
+  it('should submit the selected first player for cascading order mode', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        roundOrderMode: 'owner_sets_first_player',
+        creatorId: '1',
+        creatorName: 'User1',
+        currentRoundNumber: 1,
+      }),
+      users: [mockRoomUser1, mockRoomUser2],
+      scores: {},
+      records: [],
+      currentRound: buildRound(),
+    });
+    vi.mocked(api.dealRound).mockResolvedValue({ success: true } as never);
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '发下一轮' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '发下一轮' }));
+    fireEvent.click(screen.getByRole('button', { name: /玩家 2 User2/ }));
+    fireEvent.click(screen.getByRole('button', { name: '确认发牌' }));
+
+    await waitFor(() => {
+      expect(api.dealRound).toHaveBeenCalledWith('room1', {
+        allocations: [
+          { userId: '1', cardCount: 7 },
+          { userId: '2', cardCount: 7 },
+        ],
+        firstUserId: '2',
+      });
     });
   });
 
@@ -342,7 +454,7 @@ describe('Room Page', () => {
         creatorId: '1',
         creatorName: 'User1',
       }),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: {},
       records: [],
       currentRound: null,
@@ -367,7 +479,7 @@ describe('Room Page', () => {
         creatorId: '1',
         creatorName: 'User1',
       }),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: {},
       records: [],
       currentRound: null,
@@ -386,10 +498,12 @@ describe('Room Page', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认发牌' }));
 
     await waitFor(() => {
-      expect(api.dealRound).toHaveBeenCalledWith('room1', [
-        { userId: '1', cardCount: 5 },
-        { userId: '2', cardCount: 8 },
-      ]);
+      expect(api.dealRound).toHaveBeenCalledWith('room1', {
+        allocations: [
+          { userId: '1', cardCount: 5 },
+          { userId: '2', cardCount: 8 },
+        ],
+      });
     });
 
     unmount();
@@ -404,7 +518,7 @@ describe('Room Page', () => {
         creatorId: '1',
         creatorName: 'User1',
       }),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: {},
       records: [],
       currentRound: null,
@@ -428,12 +542,10 @@ describe('Room Page', () => {
         gameType: 'poker_rounds',
         currentRoundNumber: 1,
       }),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: { '1': 0, '2': 3 },
       records: [],
-      currentRound: {
-        roundNumber: 1,
-        dealtAt: Date.now(),
+      currentRound: buildRound({
         remainingCardCount: 12,
         hands: [
           {
@@ -449,7 +561,7 @@ describe('Room Page', () => {
             isParticipant: true,
           },
         ],
-      },
+      }),
     });
     vi.mocked(api.drawCard).mockResolvedValue({
       success: true,
@@ -476,12 +588,10 @@ describe('Room Page', () => {
         gameType: 'poker_rounds',
         currentRoundNumber: 1,
       }),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: { '1': 0, '2': 3 },
       records: [],
-      currentRound: {
-        roundNumber: 1,
-        dealtAt: Date.now(),
+      currentRound: buildRound({
         remainingCardCount: 8,
         hands: [
           {
@@ -514,7 +624,7 @@ describe('Room Page', () => {
             isParticipant: true,
           },
         ],
-      },
+      }),
     });
     vi.mocked(api.toggleCardVisibility).mockResolvedValue({
       success: true,
@@ -548,12 +658,10 @@ describe('Room Page', () => {
         gameType: 'poker_rounds',
         currentRoundNumber: 1,
       }),
-      users: [mockUser1, mockUser2],
+      users: [mockRoomUser1, mockRoomUser2],
       scores: { '1': 0, '2': 3 },
       records: [],
-      currentRound: {
-        roundNumber: 1,
-        dealtAt: Date.now(),
+      currentRound: buildRound({
         remainingCardCount: 8,
         hands: [
           {
@@ -578,7 +686,7 @@ describe('Room Page', () => {
             isParticipant: true,
           },
         ],
-      },
+      }),
     });
     vi.mocked(api.toggleCardVisibility).mockResolvedValue({
       success: true,
