@@ -2,13 +2,13 @@
 @config "../tailwind.config.mjs";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --primary: #2563EB;
-  --secondary: #3B82F6;
-  --cta: #F97316;
-  --neon-purple: #A855F7;
-  --neon-pink: #EC4899;
+  --background: #f7fbf4;
+  --foreground: #1f3527;
+  --primary: #5f985f;
+  --secondary: #78ad70;
+  --cta: #d6a647;
+  --glow-accent: #b9d9b2;
+  --surface: rgba(255, 255, 255, 0.86);
 }
 
 @theme inline {
@@ -30,11 +30,22 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .neon-glow {
-  text-shadow: 0 0 10px var(--neon-purple), 0 0 20px var(--neon-purple), 0 0 30px var(--neon-purple);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--glow-accent) 65%, transparent);
 }
 
 .neon-border {
-  box-shadow: 0 0 10px var(--neon-purple), 0 0 20px var(--neon-purple);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--glow-accent) 55%, transparent);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at top left, rgba(190, 224, 181, 0.5), transparent 34%),
+    radial-gradient(circle at top right, rgba(253, 242, 178, 0.38), transparent 26%),
+    linear-gradient(180deg, #f7fbf4 0%, #f3f8ee 42%, #eef6e8 100%);
 }
 
 .scanlines::before {
@@ -46,8 +57,8 @@ h1, h2, h3, h4, h5, h6 {
   bottom: 0;
   background: repeating-linear-gradient(
     0deg,
-    rgba(0, 0, 0, 0.15),
-    rgba(0, 0, 0, 0.15) 1px,
+    rgba(122, 154, 116, 0.04),
+    rgba(122, 154, 116, 0.04) 1px,
     transparent 1px,
     transparent 2px
   );

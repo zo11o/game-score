@@ -198,18 +198,18 @@ function RecordsPanel({
 function CardFace({ card }: { card: PlayingCard }) {
   const colorClass =
     card.color === 'red'
-      ? 'text-rose-400'
+      ? 'text-rose-600'
       : card.color === 'black'
-        ? 'text-slate-100'
-        : 'text-amber-300';
+        ? 'text-slate-800'
+        : 'text-amber-700';
   const faceUpClasses = card.isFaceUp
-    ? 'border-amber-400/80 shadow-[0_0_18px_rgba(251,191,36,0.25)]'
-    : 'border-purple-500/30';
+    ? 'border-amber-400/80 shadow-[0_0_18px_rgba(251,191,36,0.22)]'
+    : 'border-emerald-300 shadow-[0_6px_18px_rgba(95,152,95,0.12)]';
 
   return (
-    <div className={`relative w-14 h-20 rounded-xl border bg-slate-950/90 shadow-sm flex flex-col items-center justify-center gap-1 ${faceUpClasses}`}>
-      <span className={`text-sm font-bold leading-none ${colorClass}`}>{card.rank}</span>
-      <span className={`text-[22px] font-bold leading-none ${colorClass}`}>{card.label.slice(-1)}</span>
+    <div className={`relative w-14 h-20 rounded-xl border bg-gradient-to-b from-white to-emerald-50/35 shadow-sm flex flex-col items-center justify-center gap-1 ${faceUpClasses}`}>
+      <span className={`text-sm font-extrabold leading-none ${colorClass}`}>{card.rank}</span>
+      <span className={`text-[22px] font-extrabold leading-none ${colorClass}`}>{card.label.slice(-1)}</span>
     </div>
   );
 }
@@ -322,7 +322,7 @@ function ClickableCardFace({
 function CardBack({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`w-14 h-20 rounded-xl border border-pink-500/40 bg-gradient-to-br from-purple-700 via-slate-900 to-pink-600 shadow-sm flex items-center justify-center text-pink-100 text-sm font-bold ${className}`}
+      className={`w-14 h-20 rounded-xl border border-emerald-300 bg-gradient-to-br from-emerald-100 via-white to-lime-100 shadow-sm flex items-center justify-center text-emerald-700 text-sm font-bold ${className}`}
     >
       ?
     </div>
@@ -381,8 +381,8 @@ function HandStrip({
   return (
     <div className="mt-3 w-full">
       <p className="text-[11px] text-slate-400 text-center mb-2">
-        {isSelf && hasPeeked && visibleCount > 0 && showInteractionHint
-          ? '双击卡牌可亮牌或扣回'
+        {isSelf && hasPeeked && visibleCount > 0
+          ? '双击卡牌可亮牌或盖牌'
           : '本轮手牌'}
       </p>
       {hasCards ? (
@@ -449,8 +449,8 @@ function HandStrip({
             </Button>
           </div>
           {hand.hasPeeked ? (
-            <div className="w-full rounded-2xl border border-emerald-500/35 bg-slate-950/35 px-3 py-3">
-              <p className="text-[11px] text-center uppercase tracking-[0.24em] text-emerald-300/80">
+            <div className="w-full rounded-2xl border border-emerald-200 bg-emerald-50/70 px-3 py-3">
+              <p className="text-[11px] text-center uppercase tracking-[0.24em] text-emerald-700/80">
                 未亮牌统计
               </p>
               {unrevealedCards.length > 0 ? (
@@ -459,18 +459,18 @@ function HandStrip({
                     {unrevealedCards.map((card, index) => (
                       <span
                         key={`${card.code}-${index}`}
-                        className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-100"
+                        className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
                       >
                         {getCardSummaryLabel(card)}
                       </span>
                     ))}
                   </div>
-                  <p className="mt-2 text-sm text-center text-emerald-100">
-                    应给分: <span className="font-bold text-emerald-300">{suggestedScore}</span>
+                  <p className="mt-2 text-sm text-center text-emerald-700">
+                    应给分: <span className="font-bold text-emerald-800">{suggestedScore}</span>
                   </p>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-center text-slate-400">未亮牌已全部公开，应给分 0</p>
+                <p className="mt-2 text-sm text-center text-emerald-900/60">未亮牌已全部公开，应给分 0</p>
               )}
             </div>
           ) : (
@@ -509,6 +509,7 @@ export default function RoomPage() {
   const queuedRoomDataRef = useRef<RoomDetailsResponse | null>(null);
   const hasPendingAnimationRef = useRef(false);
   const previousRoundNumberRef = useRef<number | null | undefined>(undefined);
+  const hasAppliedInitialRoomDataRef = useRef(false);
   const recordsDrawer = useDisclosure();
   const dealRoundModal = useDisclosure();
   const giveScoreModal = useDisclosure();
@@ -536,6 +537,11 @@ export default function RoomPage() {
   );
 
   const applyRoomData = useCallback((data: RoomDetailsResponse) => {
+    if (!hasAppliedInitialRoomDataRef.current) {
+      previousRoundNumberRef.current = data.currentRound?.roundNumber ?? null;
+      hasAppliedInitialRoomDataRef.current = true;
+    }
+
     setRoom(data.room);
     setUsers(data.users);
     setScores(data.scores);
@@ -702,7 +708,7 @@ export default function RoomPage() {
   const isPokerRoom = room?.gameType === 'poker_rounds';
   const roomModalClassNames = {
     wrapper: 'px-3 sm:px-6',
-    base: 'w-full max-w-[calc(100vw-1.5rem)] bg-slate-800 border border-purple-500/50 sm:max-w-md',
+    base: 'w-full max-w-[calc(100vw-1.5rem)] bg-white border border-emerald-200 shadow-2xl sm:max-w-md',
     header: 'border-b border-default-200 px-4 py-4 sm:px-6',
     body: 'px-4 py-5 sm:px-6 sm:py-6',
     footer: 'flex-col-reverse gap-2 border-t border-default-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-6',
@@ -985,7 +991,7 @@ export default function RoomPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-lime-50 to-white flex items-center justify-center">
         <Spinner size="lg" color="secondary" />
       </div>
     );
@@ -1020,16 +1026,16 @@ export default function RoomPage() {
           }
           className={
             isSelf
-              ? 'relative w-full bg-slate-800/60 border border-secondary/40 shadow-[0_18px_45px_rgba(31,41,55,0.35)]'
-              : 'relative w-full bg-slate-800/50 border border-purple-500/30 hover:border-purple-500'
+              ? 'relative w-full bg-white border border-secondary/40 shadow-[0_18px_45px_rgba(105,145,98,0.16)]'
+              : 'relative w-full bg-white/90 border border-emerald-100 hover:border-emerald-300'
           }
         >
           <CardBody className="flex flex-col gap-3 p-4 sm:p-5">
             <div
               className={
                 isSelf
-                  ? 'flex w-full flex-wrap items-center gap-3 rounded-2xl border border-secondary/25 bg-slate-950/25 p-3 sm:p-4'
-                  : 'flex w-full flex-wrap items-center gap-3 rounded-2xl border border-purple-500/20 bg-slate-950/20 p-3'
+                  ? 'flex w-full flex-wrap items-center gap-3 rounded-2xl border border-secondary/25 bg-emerald-50/70 p-3 sm:p-4'
+                  : 'flex w-full flex-wrap items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3'
               }
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -1037,7 +1043,7 @@ export default function RoomPage() {
                   className={
                     isSelf
                       ? 'h-16 w-16 rounded-full overflow-hidden border-4 border-secondary shrink-0 sm:h-20 sm:w-20'
-                      : 'h-14 w-14 rounded-full overflow-hidden border-4 border-purple-500 shrink-0 sm:h-16 sm:w-16'
+                      : 'h-14 w-14 rounded-full overflow-hidden border-4 border-emerald-300 shrink-0 sm:h-16 sm:w-16'
                   }
                 >
                   <img
@@ -1052,19 +1058,19 @@ export default function RoomPage() {
                     <h3
                       className={
                         isSelf
-                          ? 'truncate text-lg font-bold text-secondary-300 sm:text-2xl'
-                          : 'truncate text-base font-bold text-purple-300 sm:text-lg'
+                          ? 'truncate text-lg font-bold text-secondary-700 sm:text-2xl'
+                          : 'truncate text-base font-bold text-emerald-800 sm:text-lg'
                       }
                     >
                       {user.name}
                     </h3>
                     {isSelf && <Chip size="sm" color="secondary">你</Chip>}
                   </div>
-                  <p className={isSelf ? 'mt-1 text-xs text-slate-400 sm:text-sm' : 'mt-0.5 text-[11px] text-slate-400 sm:text-xs'}>
+                  <p className={isSelf ? 'mt-1 text-xs text-emerald-900/60 sm:text-sm' : 'mt-0.5 text-[11px] text-emerald-900/60 sm:text-xs'}>
                     {isSelf ? '当前玩家' : '房间成员'}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-100">
+                    <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
                       玩家 {user.playerNumber}
                     </span>
                     {isPokerRoom && roundPosition && (
@@ -1073,30 +1079,25 @@ export default function RoomPage() {
                         initial={{ opacity: 0, scale: 0.7 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.28, delay: roundOrderDelay, ease: [0.22, 1, 0.36, 1] }}
-                        className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-100"
+                        className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"
                       >
                         本轮第 {roundPosition} 位
                       </motion.span>
                     )}
                   </div>
-                  {isPokerRoom && isSelf && (
-                    <p className="mt-2 text-[11px] text-amber-300/80 sm:text-xs">
-                      双击卡牌可亮牌或扣回
-                    </p>
-                  )}
                 </div>
               </div>
               <div
                 className={
                   isSelf
-                    ? 'ml-auto shrink-0 rounded-2xl bg-slate-900/70 px-4 py-3 text-center sm:min-w-[132px]'
-                    : 'ml-auto shrink-0 rounded-xl bg-slate-900/70 px-3 py-2 text-center min-w-[88px]'
-                }
-              >
-                <div className={isSelf ? 'text-3xl font-bold text-pink-400 sm:text-4xl' : 'text-2xl font-bold text-pink-400'}>
+                    ? 'ml-auto shrink-0 rounded-2xl bg-white/90 border border-emerald-100 px-4 py-3 text-center sm:min-w-[132px]'
+                    : 'ml-auto shrink-0 rounded-xl bg-white/90 border border-emerald-100 px-3 py-2 text-center min-w-[88px]'
+              }
+            >
+                <div className={isSelf ? 'text-3xl font-bold text-emerald-700 sm:text-4xl' : 'text-2xl font-bold text-emerald-700'}>
                   {scores[user.id] || 0}
                 </div>
-                <p className={isSelf ? 'mt-1 text-xs text-slate-400 sm:text-sm' : 'mt-0.5 text-[11px] text-slate-400'}>
+                <p className={isSelf ? 'mt-1 text-xs text-emerald-900/60 sm:text-sm' : 'mt-0.5 text-[11px] text-emerald-900/60'}>
                   分数
                 </p>
               </div>
@@ -1129,7 +1130,7 @@ export default function RoomPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-lime-50 to-white p-4 sm:p-6">
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 max-w-7xl mx-auto">
         <div className="flex-1 min-w-0">
           <PageHeader
@@ -1187,14 +1188,14 @@ export default function RoomPage() {
                     最近发牌: {formatTime(currentRound.dealtAt)}
                   </span>
                 )}
-                <div className="flex items-center gap-3 rounded-2xl border border-pink-500/30 bg-slate-900/70 px-4 py-3">
+                <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white/90 px-4 py-3 shadow-sm">
                   <div ref={deckRef} className="relative h-20 w-14 shrink-0">
-                    <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-lg border border-purple-500/20 bg-slate-950/60" />
+                    <div className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-lg border border-emerald-100 bg-emerald-50/80" />
                     <CardBack className="absolute inset-0" />
                   </div>
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-pink-300/70">公共牌堆</p>
-                    <p className="text-sm font-semibold text-slate-100">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-emerald-700/70">公共牌堆</p>
+                    <p className="text-sm font-semibold text-slate-700">
                       {currentRound ? `剩余 ${currentRound.remainingCardCount} 张` : '等待房主发牌'}
                     </p>
                   </div>
@@ -1219,12 +1220,12 @@ export default function RoomPage() {
             <ModalContent>
               {selectedUser && (
                 <>
-                  <ModalHeader className="flex flex-col gap-1 text-purple-400">
+                  <ModalHeader className="flex flex-col gap-1 text-emerald-800">
                     给 {selectedUser.name} 打分
                   </ModalHeader>
                   <ModalBody>
                     <div className="mb-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-                      <div className="w-16 h-16 rounded-full overflow-hidden border-4 border-purple-500 shrink-0">
+                      <div className="w-16 h-16 rounded-full overflow-hidden border-4 border-emerald-300 shrink-0">
                         <img
                           src={selectedUser.avatar}
                           alt={selectedUser.name}
@@ -1232,7 +1233,7 @@ export default function RoomPage() {
                           referrerPolicy="no-referrer"
                         />
                       </div>
-                      <div className="text-3xl sm:text-4xl font-bold text-pink-400">
+                      <div className="text-3xl sm:text-4xl font-bold text-emerald-700">
                         {scores[selectedUser.id] || 0}
                       </div>
                     </div>
@@ -1245,7 +1246,7 @@ export default function RoomPage() {
                       aria-label="分数"
                       classNames={{
                         input: 'text-center',
-                        inputWrapper: 'bg-slate-900',
+                        inputWrapper: 'bg-emerald-50/70 border border-emerald-100',
                       }}
                     />
                   </ModalBody>
@@ -1278,22 +1279,22 @@ export default function RoomPage() {
             onOpenChange={dealRoundModal.onOpenChange}
             placement="center"
             scrollBehavior="inside"
-            classNames={{
+              classNames={{
               ...roomModalClassNames,
-              base: 'w-full max-w-[calc(100vw-1.5rem)] bg-slate-800 border border-purple-500/50 sm:max-w-2xl',
+              base: 'w-full max-w-[calc(100vw-1.5rem)] bg-white border border-emerald-200 shadow-2xl sm:max-w-2xl',
             }}
           >
             <ModalContent>
-              <ModalHeader className="flex flex-col gap-1 text-purple-400">
+              <ModalHeader className="flex flex-col gap-1 text-emerald-800">
                 {currentRound ? `配置第 ${currentRound.roundNumber + 1} 轮发牌` : '配置第一轮发牌'}
               </ModalHeader>
               <ModalBody>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-slate-600">
                   每轮都会重新收牌、洗出一副全新的 54 张扑克牌；未发出的牌会保留为本轮剩余牌堆，供后续抽牌使用。
                 </p>
-                <div className="rounded-xl border border-sky-500/20 bg-slate-900/60 px-4 py-3">
+                <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.3em] text-sky-300/70">本房顺序规则</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-100">
+                  <p className="mt-2 text-sm font-semibold text-slate-700">
                     {ROUND_ORDER_MODE_LABELS[room.roundOrderMode]}
                   </p>
                 </div>
@@ -1301,10 +1302,10 @@ export default function RoomPage() {
                   {orderedUsers.map((user) => (
                     <div
                       key={user.id}
-                      className="flex flex-col gap-3 rounded-xl border border-purple-500/20 bg-slate-900/60 p-3 sm:flex-row sm:items-center"
+                      className="flex flex-col gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 sm:flex-row sm:items-center"
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="h-10 w-10 overflow-hidden rounded-full border-2 border-purple-500/40">
+                        <div className="h-10 w-10 overflow-hidden rounded-full border-2 border-emerald-200">
                           <img
                             src={user.avatar}
                             alt={user.name}
@@ -1313,7 +1314,7 @@ export default function RoomPage() {
                           />
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-100">{user.name}</p>
+                          <p className="truncate text-sm font-semibold text-slate-700">{user.name}</p>
                           <p className="text-xs text-slate-500">
                             玩家 {user.playerNumber} {user.id === currentUser.id ? '· 你' : '· 房间成员'}
                           </p>
@@ -1333,30 +1334,30 @@ export default function RoomPage() {
                         className="w-28"
                         classNames={{
                           input: 'text-center',
-                          inputWrapper: 'bg-slate-950/90',
+                          inputWrapper: 'bg-white border border-emerald-100',
                         }}
                       />
                     </div>
                   ))}
                 </div>
-                <div className="rounded-xl border border-pink-500/30 bg-pink-500/10 px-4 py-3 text-sm text-pink-200">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                   本轮总发牌数: <span className="font-bold">{roundTotal}</span> / 54
                 </div>
                 {room.roundOrderMode === 'rotate_by_player_number' && (
-                  <div className="rounded-xl border border-amber-500/20 bg-slate-900/60 px-4 py-3">
-                    <p className="text-sm text-slate-300">本轮将按玩家号轮换自动确定顺序。</p>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                    <p className="text-sm text-amber-800">本轮将按玩家号轮换自动确定顺序。</p>
                   </div>
                 )}
                 {room.roundOrderMode === 'random_each_round' && (
-                  <div className="rounded-xl border border-amber-500/20 bg-slate-900/60 px-4 py-3">
-                    <p className="text-sm text-slate-300">确认发牌后，将为本轮所有玩家随机生成顺序并播放揭示动画。</p>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                    <p className="text-sm text-amber-800">确认发牌后，将为本轮所有玩家随机生成顺序并播放揭示动画。</p>
                   </div>
                 )}
                 {room.roundOrderMode === 'owner_sets_full_order' && nextRoundNumber > 1 && (
-                  <div className="rounded-xl border border-amber-500/20 bg-slate-900/60 px-4 py-4">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-100">依次点人生成本轮完整顺序</p>
+                        <p className="text-sm font-semibold text-slate-700">依次点人生成本轮完整顺序</p>
                         <p className="text-xs text-slate-500">点过的玩家会依次拿到第 1、2、3... 位</p>
                       </div>
                       <Button
@@ -1379,7 +1380,7 @@ export default function RoomPage() {
                           return (
                             <span
                               key={userId}
-                              className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-100"
+                              className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-semibold text-amber-700"
                             >
                               {index + 1}. 玩家 {selectedUser.playerNumber} {selectedUser.name}
                             </span>
@@ -1401,8 +1402,8 @@ export default function RoomPage() {
                             disabled={selectedIndex !== -1}
                             className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
                               selectedIndex !== -1
-                                ? 'cursor-not-allowed border-amber-400/40 bg-amber-500/10 text-amber-100'
-                                : 'border-purple-500/30 bg-slate-950/70 text-slate-100 hover:border-purple-400'
+                                ? 'cursor-not-allowed border-amber-200 bg-white text-amber-700'
+                                : 'border-emerald-200 bg-white text-slate-700 hover:border-emerald-400'
                             }`}
                           >
                             <div className="font-semibold">玩家 {user.playerNumber} {user.name}</div>
@@ -1416,8 +1417,8 @@ export default function RoomPage() {
                   </div>
                 )}
                 {room.roundOrderMode === 'owner_sets_first_player' && nextRoundNumber > 1 && (
-                  <div className="rounded-xl border border-amber-500/20 bg-slate-900/60 px-4 py-4">
-                    <p className="text-sm font-semibold text-slate-100">选择本轮首位玩家</p>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-4">
+                    <p className="text-sm font-semibold text-slate-700">选择本轮首位玩家</p>
                     <p className="mt-1 text-xs text-slate-500">其余玩家会按玩家号顺延。</p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {orderedUsers.map((user) => {
@@ -1430,8 +1431,8 @@ export default function RoomPage() {
                             onClick={() => selectFirstPlayer(user.id)}
                             className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
                               isSelected
-                                ? 'border-amber-400/40 bg-amber-500/10 text-amber-100'
-                                : 'border-purple-500/30 bg-slate-950/70 text-slate-100 hover:border-purple-400'
+                                ? 'border-amber-200 bg-white text-amber-700'
+                                : 'border-emerald-200 bg-white text-slate-700 hover:border-emerald-400'
                             }`}
                           >
                             <div className="font-semibold">玩家 {user.playerNumber} {user.name}</div>
@@ -1445,13 +1446,13 @@ export default function RoomPage() {
                   </div>
                 )}
                 {(room.roundOrderMode !== 'random_each_round') && (
-                  <div className="rounded-xl border border-emerald-500/25 bg-slate-950/45 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.3em] text-emerald-300/70">下轮顺序预览</p>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.3em] text-emerald-600/70">下轮顺序预览</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {nextRoundPreviewUsers.map((user, index) => (
                         <span
                           key={user.id}
-                          className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100"
+                          className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700"
                         >
                           {index + 1}. 玩家 {user.playerNumber} {user.name}
                         </span>
@@ -1473,8 +1474,8 @@ export default function RoomPage() {
         </div>
 
         <aside className="hidden lg:block w-72 shrink-0">
-          <div className="sticky top-6 bg-slate-800/50 backdrop-blur-sm border border-purple-500/30 rounded-xl p-4">
-            <h3 className="text-lg font-bold text-purple-400 mb-4 flex items-center gap-2">
+          <div className="sticky top-6 bg-white/85 backdrop-blur-sm border border-emerald-200 rounded-xl p-4 shadow-[0_20px_40px_rgba(105,145,98,0.1)]">
+            <h3 className="text-lg font-bold text-emerald-800 mb-4 flex items-center gap-2">
               <span>支付记录</span>
               <Chip size="sm" variant="flat">{records.length}</Chip>
             </h3>
@@ -1563,7 +1564,7 @@ export default function RoomPage() {
           </svg>
         </Button>
         {records.length > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-xs font-bold text-white">
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
             {records.length}
           </span>
         )}
@@ -1575,13 +1576,13 @@ export default function RoomPage() {
         placement="bottom"
         size="lg"
         classNames={{
-          base: 'bg-slate-800 border-t border-purple-500/30',
+          base: 'bg-white border-t border-emerald-200',
           header: 'border-b border-default-200',
         }}
       >
         <DrawerContent>
           <DrawerHeader className="flex flex-col gap-1">
-            <h3 className="text-lg font-bold text-purple-400">支付记录</h3>
+            <h3 className="text-lg font-bold text-emerald-800">支付记录</h3>
             <p className="text-sm text-default-500">{records.length} 条记录</p>
           </DrawerHeader>
           <DrawerBody>
@@ -1601,14 +1602,14 @@ export default function RoomPage() {
         placement="center"
         backdrop="opaque"
         classNames={{
-          base: '!bg-slate-800 border border-red-500/50',
-          backdrop: 'bg-black/70',
+          base: '!bg-white border border-red-200',
+          backdrop: 'bg-emerald-950/20',
         }}
       >
-        <ModalContent className="!bg-slate-800 border border-red-500/50">
+        <ModalContent className="!bg-white border border-red-200">
           <ModalHeader className="flex flex-col gap-1 text-red-400">提示</ModalHeader>
           <ModalBody>
-            <p className="text-slate-200">{errorMessage}</p>
+            <p className="text-slate-700">{errorMessage}</p>
           </ModalBody>
           <ModalFooter>
             <Button color="danger" variant="light" onPress={errorModal.onClose}>
@@ -1624,14 +1625,14 @@ export default function RoomPage() {
         placement="center"
         backdrop="opaque"
         classNames={{
-          base: '!bg-slate-800 border border-green-500/50',
-          backdrop: 'bg-black/70',
+          base: '!bg-white border border-green-200',
+          backdrop: 'bg-emerald-950/20',
         }}
       >
-        <ModalContent className="!bg-slate-800 border border-green-500/50">
+        <ModalContent className="!bg-white border border-green-200">
           <ModalHeader className="flex flex-col gap-1 text-green-400">成功</ModalHeader>
           <ModalBody>
-            <p className="text-slate-200">{successMessage}</p>
+            <p className="text-slate-700">{successMessage}</p>
           </ModalBody>
           <ModalFooter>
             <Button color="success" variant="light" onPress={successModal.onClose}>

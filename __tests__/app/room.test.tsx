@@ -167,6 +167,62 @@ describe('Room Page', () => {
     expect(screen.getByText('玩家 2')).toBeInTheDocument();
   });
 
+  it('should not replay deal animation on initial load when a round already exists', async () => {
+    vi.mocked(api.getRoom).mockResolvedValue({
+      room: buildRoom({
+        gameType: 'poker_rounds',
+        currentRoundNumber: 1,
+      }),
+      users: [mockRoomUser1, mockRoomUser2],
+      scores: {},
+      records: [],
+      currentRound: buildRound({
+        hands: [
+          {
+            userId: '1',
+            visibleCards: [
+              {
+                code: 'SK',
+                rank: 'K',
+                suit: 'spades',
+                label: 'K♠',
+                color: 'black',
+                isFaceUp: false,
+              },
+            ],
+            hiddenCount: 0,
+            isParticipant: true,
+            hasPeeked: true,
+          },
+          {
+            userId: '2',
+            visibleCards: [
+              {
+                code: 'H8',
+                rank: '8',
+                suit: 'hearts',
+                label: '8♥',
+                color: 'red',
+                isFaceUp: false,
+              },
+            ],
+            hiddenCount: 0,
+            isParticipant: true,
+            hasPeeked: false,
+          },
+        ],
+      }),
+    });
+
+    render(<RoomPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Room')).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText('?')).toHaveLength(1);
+  });
+
   it('should display user scores', async () => {
     vi.mocked(api.getRoom).mockResolvedValue({
       room: buildRoom(),
@@ -338,7 +394,8 @@ describe('Room Page', () => {
     expect(screen.getByText('本轮第 1 位')).toBeInTheDocument();
     expect(screen.getByText('本轮第 2 位')).toBeInTheDocument();
     expect(screen.getByText('剩余 53 张')).toBeInTheDocument();
-    expect(screen.getAllByText('本轮手牌').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('双击卡牌可亮牌或盖牌')).toBeInTheDocument();
+    expect(screen.getByText('本轮手牌')).toBeInTheDocument();
     expect(screen.getAllByText('?').length).toBeGreaterThanOrEqual(3);
   });
 
@@ -708,7 +765,7 @@ describe('Room Page', () => {
       expect(api.toggleCardVisibility).toHaveBeenCalledWith('room1', 'SA');
     });
 
-    expect(screen.getByText('双击卡牌可亮牌或扣回')).toBeInTheDocument();
+    expect(screen.getByText('双击卡牌可亮牌或盖牌')).toBeInTheDocument();
     expect(screen.queryByText('确认收回亮牌')).not.toBeInTheDocument();
   });
 
