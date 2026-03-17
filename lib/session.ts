@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma';
 
 export const SESSION_COOKIE_NAME = 'game_score_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+const SHOULD_USE_SECURE_COOKIE =
+  process.env.NODE_ENV === 'production' &&
+  process.env.SESSION_COOKIE_SECURE !== 'false';
 
 const SESSION_USER_SELECT = {
   id: true,
@@ -67,7 +70,7 @@ export function applySessionCookie(
     expires: session.expiresAt,
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: SHOULD_USE_SECURE_COOKIE,
     path: '/',
   });
 }
@@ -79,7 +82,7 @@ export function clearSessionCookie(response: NextResponse) {
     expires: new Date(0),
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: SHOULD_USE_SECURE_COOKIE,
     path: '/',
   });
 }
