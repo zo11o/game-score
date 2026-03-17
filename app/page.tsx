@@ -24,8 +24,8 @@ const GAME_TYPE_LABELS: Record<Room['gameType'], string> = {
 export default function Home() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [filteredRooms, setFilteredRooms] = useState<Room[]>([]);
-  const [roomNumberFilter, setRoomNumberFilter] = useState('');
-  const [creatorNameFilter, setCreatorNameFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const createRoomModal = useDisclosure();
   const joinRoomModal = useDisclosure();
@@ -55,20 +55,17 @@ export default function Home() {
   useEffect(() => {
     let filtered = rooms;
 
-    if (roomNumberFilter) {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
       filtered = filtered.filter(room =>
-        room.roomNumber.toString().includes(roomNumberFilter)
-      );
-    }
-
-    if (creatorNameFilter) {
-      filtered = filtered.filter(room =>
-        room.creatorName.toLowerCase().includes(creatorNameFilter.toLowerCase())
+        room.roomNumber.toString().includes(searchQuery) ||
+        room.creatorName.toLowerCase().includes(query) ||
+        room.name.toLowerCase().includes(query)
       );
     }
 
     setFilteredRooms(filtered);
-  }, [rooms, roomNumberFilter, creatorNameFilter]);
+  }, [rooms, searchQuery]);
 
   const handleCreateRoom = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -139,85 +136,84 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 pb-24">
       <div className="max-w-6xl mx-auto p-6">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold neon-glow text-purple-400">游戏大厅</h1>
+        <div className="flex justify-between items-center mb-8 gap-4">
+          <h1 className="text-4xl font-bold neon-glow text-purple-400 whitespace-nowrap">游戏大厅</h1>
+
+          <div
+            className={`transition-all duration-300 ease-out ${
+              isSearchFocused ? 'w-full max-w-md' : 'w-48'
+            }`}
+          >
+            <Input
+              placeholder="搜索房间号/创建者/房间名"
+              value={searchQuery}
+              onValueChange={setSearchQuery}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              isClearable
+              onClear={() => setSearchQuery('')}
+              startContent={
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-5 h-5 text-purple-400"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+                  />
+                </svg>
+              }
+              classNames={{
+                base: 'max-w-full',
+                inputWrapper: 'bg-slate-800/50 border border-purple-500/30 hover:border-purple-500/50 focus-within:border-purple-500 transition-all',
+              }}
+            />
+          </div>
         </div>
 
-        {/* Filter inputs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <Input
-            placeholder="按房间号筛选"
-            value={roomNumberFilter}
-            onValueChange={setRoomNumberFilter}
-            isClearable
-            onClear={() => setRoomNumberFilter('')}
-            startContent={
-              <span className="text-purple-400 text-lg">#</span>
-            }
-            classNames={{
-              base: 'max-w-full',
-              inputWrapper: 'bg-slate-800/50 border border-purple-500/30 hover:border-purple-500/50',
-            }}
-          />
-          <Input
-            placeholder="按创建者昵称筛选"
-            value={creatorNameFilter}
-            onValueChange={setCreatorNameFilter}
-            isClearable
-            onClear={() => setCreatorNameFilter('')}
-            startContent={
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="currentColor"
-                className="w-5 h-5 text-purple-400"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                />
-              </svg>
-            }
-            classNames={{
-              base: 'max-w-full',
-              inputWrapper: 'bg-slate-800/50 border border-purple-500/30 hover:border-purple-500/50',
-            }}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
           {filteredRooms.map((room) => (
             <div
               key={room.id}
-              className="relative bg-slate-800/50 backdrop-blur-sm border border-purple-500/30 rounded-xl p-6 hover:border-purple-500 transition-all cursor-pointer scanlines"
+              className="relative bg-slate-800/50 backdrop-blur-sm border border-purple-500/30 rounded-xl p-3 md:p-6 hover:border-purple-500 transition-all cursor-pointer scanlines"
               onClick={() => handleRoomSelect(room)}
             >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-1 text-xs font-bold bg-purple-500/20 text-purple-300 rounded border border-purple-500/30">
+              {/* 状态徽章 */}
+              <div className={`absolute -top-2 -right-2 md:-top-3 md:-right-3 w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center text-[10px] md:text-xs font-bold shadow-lg transform rotate-12 ${
+                room.status === 'finished'
+                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 text-slate-300 border-2 border-slate-500'
+                  : 'bg-gradient-to-br from-green-500 to-emerald-600 text-white border-2 border-green-400'
+              }`}>
+                {room.status === 'finished' ? '已结束' : '进行中'}
+              </div>
+
+              <div className="flex items-center gap-1 md:gap-2 mb-2 flex-wrap">
+                <span className="px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs font-bold bg-purple-500/20 text-purple-300 rounded border border-purple-500/30">
                   #{room.roomNumber}
                 </span>
-                <span className="px-2 py-1 text-xs font-bold bg-slate-900/70 text-pink-300 rounded border border-pink-500/30">
+                <span className="px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs font-bold bg-slate-900/70 text-pink-300 rounded border border-pink-500/30">
                   {GAME_TYPE_LABELS[room.gameType]}
                 </span>
               </div>
-              <h3 className="text-xl font-bold text-purple-300 mb-1">{room.name}</h3>
-              <p className="text-sm text-slate-400 mb-2">创建者: {room.creatorName}</p>
-              <p className="text-xs text-slate-500 mb-2">
-                创建时间: {new Date(room.createdAt).toLocaleString('zh-CN', {
-                  year: 'numeric',
+              <h3 className="text-base md:text-xl font-bold text-purple-300 mb-1 truncate">{room.name}</h3>
+              <p className="text-xs md:text-sm text-slate-400 mb-1 truncate">创建者: {room.creatorName}</p>
+              <p className="text-[10px] md:text-xs text-slate-500 mb-2">
+                {new Date(room.createdAt).toLocaleString('zh-CN', {
                   month: '2-digit',
                   day: '2-digit',
                   hour: '2-digit',
                   minute: '2-digit',
                 })}
               </p>
-              <div className="flex items-center gap-2 text-sm text-slate-400">
-                <span>👥 {room.users.length} 人</span>
-                <span>
-                  {currentUser && room.users.includes(currentUser.id) ? '✅ 已加入，可直接进入' : '🔒 需要密码'}
+              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 text-xs md:text-sm text-slate-400">
+                <span className="whitespace-nowrap">👥 {room.users.length} 人</span>
+                <span className="text-[10px] md:text-xs">
+                  {currentUser && room.users.includes(currentUser.id) ? '✅ 已加入' : '🔒 需密码'}
                 </span>
               </div>
             </div>
