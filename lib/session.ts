@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 
 export const SESSION_COOKIE_NAME = 'game_score_session';
@@ -84,10 +85,7 @@ export function clearSessionCookie(response: NextResponse) {
 }
 
 export function unauthorizedResponse(message = '登录已失效，请重新登录') {
-  const response = NextResponse.json(
-    { error: message },
-    { status: 401 }
-  );
+  const response = errorResponse(message, 401);
   clearSessionCookie(response);
   return response;
 }

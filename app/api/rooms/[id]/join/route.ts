@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateSystemUser, INITIAL_SCORE } from '@/lib/system-user';
 import { broadcastRoomUpdate } from '@/lib/room-events';
@@ -23,27 +24,24 @@ export async function POST(
     });
 
     if (!room) {
-      return NextResponse.json({ error: '房间不存在' }, { status: 404 });
+      return errorResponse('房间不存在', 404);
     }
 
     if (room.status === 'finished') {
-      return NextResponse.json({ error: '房间已结束，无法加入' }, { status: 400 });
+      return errorResponse('房间已结束，无法加入', 400);
     }
 
     const alreadyJoined = room.members.some((m) => m.userId === session.user.id);
     if (alreadyJoined) {
-      return NextResponse.json({ joined: true });
+      return successResponse({ joined: true }, '已在房间中');
     }
 
     if (!password) {
-      return NextResponse.json(
-        { error: '密码不能为空' },
-        { status: 400 }
-      );
+      return errorResponse('密码不能为空', 400);
     }
 
     if (room.password !== password) {
-      return NextResponse.json({ error: '密码错误' }, { status: 400 });
+      return errorResponse('密码错误', 400);
     }
 
     const systemUser = await getOrCreateSystemUser();
@@ -69,12 +67,9 @@ export async function POST(
 
     broadcastRoomUpdate(id);
 
-    return NextResponse.json({ joined: true });
+    return successResponse({ joined: true }, '加入房间成功');
   } catch (err) {
     console.error('Join room error:', err);
-    return NextResponse.json(
-      { error: '加入房间失败' },
-      { status: 500 }
-    );
+    return errorResponse('加入房间失败', 500);
   }
 }

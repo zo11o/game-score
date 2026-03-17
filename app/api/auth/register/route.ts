@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { applySessionCookie, createSession } from '@/lib/session';
@@ -8,17 +9,11 @@ export async function POST(request: NextRequest) {
     const { email, password, name } = await request.json();
 
     if (!email || !password || !name) {
-      return NextResponse.json(
-        { error: '邮箱、密码和昵称不能为空' },
-        { status: 400 }
-      );
+      return errorResponse('邮箱、密码和昵称不能为空', 400);
     }
 
     if (password.length < 6) {
-      return NextResponse.json(
-        { error: '密码至少需要 6 位' },
-        { status: 400 }
-      );
+      return errorResponse('密码至少需要 6 位', 400);
     }
 
     const normalizedEmail = email.toLowerCase().trim();
@@ -28,10 +23,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (existing) {
-      return NextResponse.json(
-        { error: '该邮箱已被注册，请直接登录' },
-        { status: 400 }
-      );
+      return errorResponse('该邮箱已被注册，请直接登录', 400);
     }
 
     const passwordHash = await hashPassword(password);
@@ -44,21 +36,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const response = NextResponse.json({
+    const response = successResponse({
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         avatar: user.avatar,
       },
-    });
+    }, '注册成功');
     applySessionCookie(response, await createSession(user.id));
     return response;
   } catch (err) {
     console.error('Register error:', err);
-    return NextResponse.json(
-      { error: '注册失败，请重试' },
-      { status: 500 }
-    );
+    return errorResponse('注册失败，请重试', 500);
   }
 }

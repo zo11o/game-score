@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateSystemUser, INITIAL_SCORE } from '@/lib/system-user';
 import { serializeRoom } from '@/lib/room-response';
@@ -44,17 +45,15 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json(
+    return successResponse(
       rooms.map((room) =>
         serializeRoom(room, room.creator, room.members.map((member) => member.userId))
-      )
+      ),
+      '获取房间列表成功'
     );
   } catch (err) {
     console.error('Get rooms error:', err);
-    return NextResponse.json(
-      { error: '获取房间列表失败' },
-      { status: 500 }
-    );
+    return errorResponse('获取房间列表失败', 500);
   }
 }
 
@@ -68,17 +67,11 @@ export async function POST(request: NextRequest) {
     const { name, password, gameType } = await request.json();
 
     if (!name || !password) {
-      return NextResponse.json(
-        { error: '房间名称和密码不能为空' },
-        { status: 400 }
-      );
+      return errorResponse('房间名称和密码不能为空', 400);
     }
 
     if (gameType && !VALID_GAME_TYPES.has(gameType)) {
-      return NextResponse.json(
-        { error: '不支持的游戏类型' },
-        { status: 400 }
-      );
+      return errorResponse('不支持的游戏类型', 400);
     }
 
     // Get the next room number
@@ -121,14 +114,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    return successResponse({
       room: serializeRoom(room, room.creator, [session.user.id]),
-    });
+    }, '创建房间成功');
   } catch (err) {
     console.error('Create room error:', err);
-    return NextResponse.json(
-      { error: '创建房间失败' },
-      { status: 500 }
-    );
+    return errorResponse('创建房间失败', 500);
   }
 }

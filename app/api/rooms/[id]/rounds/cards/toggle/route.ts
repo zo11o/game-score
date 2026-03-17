@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { broadcastRoomUpdate } from '@/lib/room-events';
 import { parseStringArrayJson } from '@/lib/round-state';
@@ -28,10 +29,7 @@ export async function POST(
     const { cardCode } = (await request.json()) as { cardCode?: string };
 
     if (!cardCode) {
-      return NextResponse.json(
-        { error: '缺少要翻面的牌' },
-        { status: 400 }
-      );
+      return errorResponse('缺少要翻面的牌', 400);
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -114,19 +112,16 @@ export async function POST(
 
     broadcastRoomUpdate(result.roomId);
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       isFaceUp: result.isFaceUp,
-    });
+    }, '翻牌成功');
   } catch (err) {
     if (err instanceof ToggleCardError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return errorResponse(err.message, err.status);
     }
 
     console.error('Toggle card visibility error:', err);
-    return NextResponse.json(
-      { error: '翻牌失败，请重试' },
-      { status: 500 }
-    );
+    return errorResponse('翻牌失败，请重试', 500);
   }
 }

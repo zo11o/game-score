@@ -1,6 +1,7 @@
 'use client';
 
 import type {
+  ApiResponse,
   DealAllocation,
   ParticipationHistory,
   Room,
@@ -42,14 +43,14 @@ export function isUnauthorizedError(error: unknown): error is ApiError {
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
-  const data = await res.json();
-  if (!res.ok) {
+  const response = await res.json() as ApiResponse<T>;
+  if (!res.ok || response.code !== 0) {
     if (res.status === 401) {
       setCurrentUser(null);
     }
-    throw new ApiError(data.error || '请求失败', res.status);
+    throw new ApiError(response.message || '请求失败', res.status);
   }
-  return data as T;
+  return response.data;
 }
 
 export const api = {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { broadcastRoomDraw, broadcastRoomUpdate } from '@/lib/room-events';
 import { parseStringArrayJson, stringifyStringArray } from '@/lib/round-state';
@@ -120,20 +121,17 @@ export async function POST(
     broadcastRoomDraw(result);
     broadcastRoomUpdate(result.roomId);
 
-    return NextResponse.json({
+    return successResponse({
       success: true,
       drawId: result.drawId,
       roundNumber: result.roundNumber,
-    });
+    }, '抽牌成功');
   } catch (err) {
     if (err instanceof DrawCardError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return errorResponse(err.message, err.status);
     }
 
     console.error('Draw card error:', err);
-    return NextResponse.json(
-      { error: '抽牌失败，请重试' },
-      { status: 500 }
-    );
+    return errorResponse('抽牌失败，请重试', 500);
   }
 }

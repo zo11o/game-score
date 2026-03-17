@@ -6,6 +6,12 @@ export interface User {
   avatar: string;
 }
 
+export interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data: T;
+}
+
 export type GameType = 'classic' | 'poker_rounds';
 
 export interface Room {

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
 import { SYSTEM_EMAIL } from '@/lib/system-user';
@@ -16,10 +17,7 @@ export async function GET(
     const { id: userId } = await params;
 
     if (session.user.id !== userId) {
-      return NextResponse.json(
-        { error: '无权查看其他用户的参与历史' },
-        { status: 403 }
-      );
+      return errorResponse('无权查看其他用户的参与历史', 403);
     }
 
     // Get all room memberships for the user
@@ -86,12 +84,9 @@ export async function GET(
       };
     });
 
-    return NextResponse.json(history);
+    return successResponse(history, '获取参与历史成功');
   } catch (err) {
     console.error('Get user history error:', err);
-    return NextResponse.json(
-      { error: '获取参与历史失败' },
-      { status: 500 }
-    );
+    return errorResponse('获取参与历史失败', 500);
   }
 }

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { broadcastRoomUpdate } from '@/lib/room-events';
 import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
@@ -13,25 +14,16 @@ export async function POST(request: NextRequest) {
     const { roomId, toUserId, points } = await request.json();
 
     if (!roomId || !toUserId || points == null) {
-      return NextResponse.json(
-        { error: '缺少必要参数' },
-        { status: 400 }
-      );
+      return errorResponse('缺少必要参数', 400);
     }
 
     const pointsNum = Number(points);
     if (pointsNum <= 0) {
-      return NextResponse.json(
-        { error: '分数必须大于 0' },
-        { status: 400 }
-      );
+      return errorResponse('分数必须大于 0', 400);
     }
 
     if (session.user.id === toUserId) {
-      return NextResponse.json(
-        { error: '不能给自己打分' },
-        { status: 400 }
-      );
+      return errorResponse('不能给自己打分', 400);
     }
 
     // 检查房间状态
@@ -43,19 +35,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!room) {
-      return NextResponse.json({ error: '房间不存在' }, { status: 404 });
+      return errorResponse('房间不存在', 404);
     }
 
     if (room.status === 'finished') {
-      return NextResponse.json({ error: '房间已结束，无法继续打分' }, { status: 400 });
+      return errorResponse('房间已结束，无法继续打分', 400);
     }
 
     const memberIds = new Set(room.members.map((member) => member.userId));
     if (!memberIds.has(session.user.id) || !memberIds.has(toUserId)) {
-      return NextResponse.json(
-        { error: '只能给房间内成员打分' },
-        { status: 403 }
-      );
+      return errorResponse('只能给房间内成员打分', 403);
     }
 
     // 创建分数记录并更新房间最后活动时间
@@ -77,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     broadcastRoomUpdate(roomId);
 
-    return NextResponse.json({
+    return successResponse({
       score: {
         id: score.id,
         roomId: score.roomId,
@@ -86,12 +75,9 @@ export async function POST(request: NextRequest) {
         points: score.points,
         timestamp: score.timestamp.getTime(),
       },
-    });
+    }, '添加分数成功');
   } catch (err) {
     console.error('Add score error:', err);
-    return NextResponse.json(
-      { error: '添加分数失败' },
-      { status: 500 }
-    );
+    return errorResponse('添加分数失败', 500);
   }
 }

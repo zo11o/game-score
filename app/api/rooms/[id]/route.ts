@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { serializeCard } from '@/lib/cards';
 import { prisma } from '@/lib/prisma';
 import { parseStringArrayJson } from '@/lib/round-state';
@@ -44,15 +45,12 @@ export async function GET(
     });
 
     if (!room) {
-      return NextResponse.json({ error: '房间不存在' }, { status: 404 });
+      return errorResponse('房间不存在', 404);
     }
 
     const isMember = room.members.some((member) => member.userId === session.user.id);
     if (!isMember) {
-      return NextResponse.json(
-        { error: '你还不是该房间成员' },
-        { status: 403 }
-      );
+      return errorResponse('你还不是该房间成员', 403);
     }
 
     const scoreRecords = await prisma.score.findMany({
@@ -143,7 +141,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({
+    return successResponse({
       room: serializeRoom(room, room.creator, room.members.map((member) => member.userId)),
       users: room.members.map((m) => ({
         id: m.user.id,
@@ -154,12 +152,9 @@ export async function GET(
       scores: userScores,
       records,
       currentRound,
-    });
+    }, '获取房间详情成功');
   } catch (err) {
     console.error('Get room error:', err);
-    return NextResponse.json(
-      { error: '获取房间失败' },
-      { status: 500 }
-    );
+    return errorResponse('获取房间失败', 500);
   }
 }

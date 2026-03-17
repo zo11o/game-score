@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { errorResponse, successResponse } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { broadcastRoomUpdate } from '@/lib/room-events';
 import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
@@ -23,15 +24,15 @@ export async function POST(
     });
 
     if (!room) {
-      return NextResponse.json({ error: '房间不存在' }, { status: 404 });
+      return errorResponse('房间不存在', 404);
     }
 
     if (!room.members.some((member) => member.userId === session.user.id)) {
-      return NextResponse.json({ error: '你无权结束该房间' }, { status: 403 });
+      return errorResponse('你无权结束该房间', 403);
     }
 
     if (room.status === 'finished') {
-      return NextResponse.json({ error: '房间已结束' }, { status: 400 });
+      return errorResponse('房间已结束', 400);
     }
 
     await prisma.room.update({
@@ -44,9 +45,9 @@ export async function POST(
 
     broadcastRoomUpdate(id);
 
-    return NextResponse.json({ success: true });
+    return successResponse({ success: true }, '结束房间成功');
   } catch (err) {
     console.error('Finish room error:', err);
-    return NextResponse.json({ error: '结束房间失败' }, { status: 500 });
+    return errorResponse('结束房间失败', 500);
   }
 }
