@@ -11,6 +11,7 @@ type PageHeaderProps = {
   contentBelow?: ReactNode;
   showBackButton?: boolean;
   showHomeButton?: boolean;
+  onBack?: () => void;
   backHref?: string;
   className?: string;
 };
@@ -82,12 +83,18 @@ export function PageHeader({
   contentBelow,
   showBackButton = false,
   showHomeButton = false,
+  onBack,
   backHref = '/',
   className = '',
 }: PageHeaderProps) {
   const router = useRouter();
 
   const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+
     if (typeof window !== 'undefined' && window.history.length > 1 && typeof router.back === 'function') {
       router.back();
       return;

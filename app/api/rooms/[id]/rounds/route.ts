@@ -97,35 +97,23 @@ export async function POST(
 
     if (room.roundOrderMode === 'rotate_by_player_number' || room.roundOrderMode === 'random_each_round') {
       if ((orderedUserIds && orderedUserIds.length > 0) || firstUserId) {
-        return NextResponse.json(
-          { error: '当前顺序模式不需要房主手动指定本轮次序' },
-          { status: 400 }
-        );
+        return errorResponse('当前顺序模式不需要房主手动指定本轮次序', 400);
       }
     }
 
     if (room.roundOrderMode === 'owner_sets_full_order' && !isFirstRound) {
       if (!Array.isArray(orderedUserIds) || orderedUserIds.length === 0) {
-        return NextResponse.json(
-          { error: '请按完整顺序选择本轮所有玩家' },
-          { status: 400 }
-        );
+        return errorResponse('请按完整顺序选择本轮所有玩家', 400);
       }
 
       if (!isCompletePermutation(participantUserIds, orderedUserIds)) {
-        return NextResponse.json(
-          { error: '本轮完整顺序必须覆盖且仅覆盖所有玩家一次' },
-          { status: 400 }
-        );
+        return errorResponse('本轮完整顺序必须覆盖且仅覆盖所有玩家一次', 400);
       }
     }
 
     if (room.roundOrderMode === 'owner_sets_first_player' && !isFirstRound) {
       if (!firstUserId || !memberIds.has(firstUserId)) {
-        return NextResponse.json(
-          { error: '请选择本轮的首位玩家' },
-          { status: 400 }
-        );
+        return errorResponse('请选择本轮的首位玩家', 400);
       }
     }
 
