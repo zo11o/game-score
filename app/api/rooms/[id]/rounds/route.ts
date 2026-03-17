@@ -3,6 +3,7 @@ import { errorResponse, successResponse } from '@/lib/api-response';
 import { shuffleDeck } from '@/lib/cards';
 import { prisma } from '@/lib/prisma';
 import { stringifyStringArray } from '@/lib/round-state';
+import { buildOrderedCascade, isCompletePermutation, rotatePlayerOrder } from '@/lib/round-order';
 import { broadcastRoomUpdate } from '@/lib/room-events';
 import { getAuthenticatedSession, unauthorizedResponse } from '@/lib/session';
 
@@ -22,7 +23,15 @@ export async function POST(
     }
 
     const { id } = await params;
-    const { allocations } = await request.json() as { allocations?: AllocationInput[] };
+    const {
+      allocations,
+      orderedUserIds,
+      firstUserId,
+    } = await request.json() as {
+      allocations?: AllocationInput[];
+      orderedUserIds?: string[];
+      firstUserId?: string;
+    };
 
     if (!Array.isArray(allocations) || allocations.length === 0) {
       return errorResponse('请提供本轮发牌配置', 400);
@@ -32,7 +41,7 @@ export async function POST(
       where: { id },
       include: {
         members: {
-          orderBy: { id: 'asc' },
+          orderBy: { playerNumber: 'asc' },
         },
       },
     });
@@ -59,6 +68,7 @@ export async function POST(
 
     const memberIds = new Set(room.members.map((member) => member.userId));
     const allocationMap = new Map<string, number>();
+    const participantUserIds = room.members.map((member) => member.userId);
 
     for (const allocation of allocations) {
       if (!allocation?.userId || !memberIds.has(allocation.userId)) {
@@ -82,25 +92,83 @@ export async function POST(
       return errorResponse('本轮总发牌数必须在 1 到 54 张之间', 400);
     }
 
+    const nextRoundNumber = (room.currentRoundNumber ?? 0) + 1;
+    const isFirstRound = nextRoundNumber === 1;
+
+    if (room.roundOrderMode === 'rotate_by_player_number' || room.roundOrderMode === 'random_each_round') {
+      if ((orderedUserIds && orderedUserIds.length > 0) || firstUserId) {
+        return NextResponse.json(
+          { error: '当前顺序模式不需要房主手动指定本轮次序' },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (room.roundOrderMode === 'owner_sets_full_order' && !isFirstRound) {
+      if (!Array.isArray(orderedUserIds) || orderedUserIds.length === 0) {
+        return NextResponse.json(
+          { error: '请按完整顺序选择本轮所有玩家' },
+          { status: 400 }
+        );
+      }
+
+      if (!isCompletePermutation(participantUserIds, orderedUserIds)) {
+        return NextResponse.json(
+          { error: '本轮完整顺序必须覆盖且仅覆盖所有玩家一次' },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (room.roundOrderMode === 'owner_sets_first_player' && !isFirstRound) {
+      if (!firstUserId || !memberIds.has(firstUserId)) {
+        return NextResponse.json(
+          { error: '请选择本轮的首位玩家' },
+          { status: 400 }
+        );
+      }
+    }
+
     const deck = shuffleDeck();
-    const participantUserIds = room.members.map((member) => member.userId);
     const remainingDeck = deck.slice(totalCards);
+    const turnOrderUserIds = (() => {
+      if (isFirstRound) {
+        return participantUserIds;
+      }
+
+      if (room.roundOrderMode === 'rotate_by_player_number') {
+        return rotatePlayerOrder(participantUserIds, nextRoundNumber);
+      }
+
+      if (room.roundOrderMode === 'random_each_round') {
+        return shuffleDeck(participantUserIds);
+      }
+
+      if (room.roundOrderMode === 'owner_sets_full_order') {
+        return orderedUserIds ?? participantUserIds;
+      }
+
+      if (room.roundOrderMode === 'owner_sets_first_player' && firstUserId) {
+        return buildOrderedCascade(participantUserIds, firstUserId);
+      }
+
+      return participantUserIds;
+    })();
+
     let deckIndex = 0;
-    const cardsToCreate = room.members.flatMap((member) => {
-      const cardCount = allocationMap.get(member.userId) ?? 0;
+    const cardsToCreate = turnOrderUserIds.flatMap((userId) => {
+      const cardCount = allocationMap.get(userId) ?? 0;
       return Array.from({ length: cardCount }, (_, dealtOrder) => {
         const cardCode = deck[deckIndex];
         deckIndex += 1;
 
         return {
-          userId: member.userId,
+          userId,
           cardCode,
           dealtOrder,
         };
       });
     });
-
-    const nextRoundNumber = (room.currentRoundNumber ?? 0) + 1;
 
     await prisma.$transaction([
       prisma.roomRound.create({
@@ -110,6 +178,7 @@ export async function POST(
           startedByUserId: session.user.id,
           remainingDeckJson: stringifyStringArray(remainingDeck),
           participantUserIdsJson: stringifyStringArray(participantUserIds),
+          turnOrderUserIdsJson: stringifyStringArray(turnOrderUserIds),
           cards: {
             create: cardsToCreate,
           },

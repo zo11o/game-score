@@ -47,6 +47,7 @@ describe('Home Page (Game Lobby)', () => {
     creatorId: '1',
     creatorName: 'TestUser',
     gameType: 'classic',
+    roundOrderMode: 'rotate_by_player_number',
     createdAt: Date.now(),
     lastActivityAt: Date.now(),
     currentRoundNumber: null,
@@ -171,17 +172,18 @@ describe('Home Page (Game Lobby)', () => {
     fireEvent.submit(form!);
 
     await waitFor(() => {
-      expect(api.createRoom).toHaveBeenCalledWith('New Room', 'password123', 'classic');
+      expect(api.createRoom).toHaveBeenCalledWith('New Room', 'password123', 'classic', undefined);
       expect(mockPush).toHaveBeenCalledWith('/room/2');
     });
   });
 
-  it('should create poker rounds room when selected', async () => {
+  it('should show round order options for poker rooms and submit the selected mode', async () => {
     vi.mocked(getCurrentUser).mockReturnValue(mockUser);
     const newRoom = buildRoom({
       id: '3',
       name: 'Poker Room',
       gameType: 'poker_rounds',
+      roundOrderMode: 'owner_sets_first_player',
     });
     vi.mocked(api.createRoom).mockResolvedValue(newRoom);
 
@@ -196,11 +198,18 @@ describe('Home Page (Game Lobby)', () => {
     fireEvent.change(screen.getByLabelText('房间名称'), { target: { value: 'Poker Room' } });
     fireEvent.change(screen.getByLabelText('房间密码'), { target: { value: 'password123' } });
     fireEvent.change(screen.getByLabelText('游戏类型'), { target: { value: 'poker_rounds' } });
+    expect(screen.getByLabelText('每轮顺序规则')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('每轮顺序规则'), { target: { value: 'owner_sets_first_player' } });
 
     fireEvent.submit(screen.getByLabelText('房间名称').closest('form')!);
 
     await waitFor(() => {
-      expect(api.createRoom).toHaveBeenCalledWith('Poker Room', 'password123', 'poker_rounds');
+      expect(api.createRoom).toHaveBeenCalledWith(
+        'Poker Room',
+        'password123',
+        'poker_rounds',
+        'owner_sets_first_player'
+      );
       expect(mockPush).toHaveBeenCalledWith('/room/3');
     });
   });

@@ -13,6 +13,11 @@ export interface ApiResponse<T> {
 }
 
 export type GameType = 'classic' | 'poker_rounds';
+export type RoundOrderMode =
+  | 'rotate_by_player_number'
+  | 'random_each_round'
+  | 'owner_sets_full_order'
+  | 'owner_sets_first_player';
 
 export interface Room {
   id: string;
@@ -23,10 +28,15 @@ export interface Room {
   creatorId: string;
   creatorName: string;
   gameType: GameType;
+  roundOrderMode: RoundOrderMode;
   createdAt: number;
   lastActivityAt: number;
   currentRoundNumber: number | null;
   users: string[];
+}
+
+export interface RoomUser extends User {
+  playerNumber: number;
 }
 
 export interface Score {
@@ -70,12 +80,19 @@ export interface CurrentRound {
   roundNumber: number;
   dealtAt: number;
   remainingCardCount: number;
+  turnOrderUserIds: string[];
   hands: RoundHand[];
 }
 
 export interface DealAllocation {
   userId: string;
   cardCount: number;
+}
+
+export interface DealRoundPayload {
+  allocations: DealAllocation[];
+  orderedUserIds?: string[];
+  firstUserId?: string;
 }
 
 export interface RoomDrawEvent {
@@ -103,7 +120,7 @@ export interface ParticipationHistory {
 
 export interface RoomDetailsResponse {
   room: Room;
-  users: User[];
+  users: RoomUser[];
   scores: Record<string, number>;
   records: ScoreRecord[];
   currentRound: CurrentRound | null;

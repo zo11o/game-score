@@ -13,6 +13,7 @@ type SerializableRoom = {
   roomNumber: number;
   creatorId: string;
   gameType: string;
+  roundOrderMode: string;
   createdAt: Date;
   lastActivityAt: Date;
   currentRoundNumber: number | null;
@@ -32,6 +33,7 @@ export function serializeRoom(
     creatorId: room.creatorId,
     creatorName: creator.name,
     gameType: room.gameType as RoomDto['gameType'],
+    roundOrderMode: room.roundOrderMode as RoomDto['roundOrderMode'],
     createdAt: room.createdAt.getTime(),
     lastActivityAt: room.lastActivityAt.getTime(),
     currentRoundNumber: room.currentRoundNumber,
