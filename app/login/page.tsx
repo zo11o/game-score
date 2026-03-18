@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { api, setCurrentUser } from '@/lib/api';
+import { responsiveErrorModalClassNames } from '@/lib/modal-styles';
 import { generateNickname } from '@/lib/nickname-generator';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure } from '@heroui/react';
@@ -61,7 +62,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-lime-50 to-white flex items-center justify-center p-6">
-      <div className="bg-white/85 backdrop-blur-sm border border-emerald-200 rounded-xl p-8 max-w-md w-full shadow-[0_20px_60px_rgba(105,145,98,0.12)] scanlines">
+      <div className="bg-white/85 backdrop-blur-sm border border-emerald-200 rounded-xl p-6 sm:p-8 max-w-md w-full shadow-[0_20px_60px_rgba(105,145,98,0.12)] scanlines">
         <h1 className="text-3xl sm:text-4xl font-bold text-center neon-glow text-emerald-800 mb-8">赛事记分</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
           <Input
@@ -129,10 +130,7 @@ export default function Login() {
         onOpenChange={errorModal.onOpenChange}
         placement="center"
         backdrop="opaque"
-        classNames={{
-          base: '!bg-white border border-red-200',
-          backdrop: 'bg-emerald-950/20',
-        }}
+        classNames={responsiveErrorModalClassNames}
       >
         <ModalContent className="!bg-white border border-red-200">
           <ModalHeader className="flex flex-col gap-1 text-red-400">提示</ModalHeader>

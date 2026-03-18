@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, getCurrentUser, isUnauthorizedError, setCurrentUser as persistCurrentUser } from '@/lib/api';
+import { responsiveErrorModalClassNames, responsiveModalClassNames } from '@/lib/modal-styles';
 import { ROUND_ORDER_MODE_LABELS } from '@/lib/round-order';
 import { PageHeader } from '@/components/page-header';
 import { AuthModal } from '@/components/auth-modal';
@@ -293,13 +294,7 @@ export default function Home() {
           }}
           placement="center"
           backdrop="opaque"
-          classNames={{
-            base: '!bg-white border border-emerald-200 shadow-2xl',
-            backdrop: 'bg-emerald-950/20',
-            header: 'border-b border-default-200',
-            body: 'py-6',
-            footer: 'border-t border-default-200',
-          }}
+          classNames={responsiveModalClassNames}
         >
           <ModalContent className="!bg-white border border-emerald-200">
             <form onSubmit={handleCreateRoom}>
@@ -397,13 +392,7 @@ export default function Home() {
           }}
           placement="center"
           backdrop="opaque"
-          classNames={{
-            base: '!bg-white border border-emerald-200 shadow-2xl',
-            backdrop: 'bg-emerald-950/20',
-            header: 'border-b border-default-200',
-            body: 'py-6',
-            footer: 'border-t border-default-200',
-          }}
+          classNames={responsiveModalClassNames}
         >
           <ModalContent className="!bg-white border border-emerald-200">
             {selectedRoom && (
@@ -531,10 +520,7 @@ export default function Home() {
         onOpenChange={errorModal.onOpenChange}
         placement="center"
         backdrop="opaque"
-        classNames={{
-          base: '!bg-white border border-red-200',
-          backdrop: 'bg-emerald-950/20',
-        }}
+        classNames={responsiveErrorModalClassNames}
       >
         <ModalContent className="!bg-white border border-red-200">
           <ModalHeader className="flex flex-col gap-1 text-red-400">提示</ModalHeader>

@@ -4,6 +4,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { api, getCurrentUser, isUnauthorizedError } from '@/lib/api';
 import {
+  buildResponsiveModalClassNames,
+  responsiveErrorModalClassNames,
+  responsiveSuccessModalClassNames,
+} from '@/lib/modal-styles';
+import {
   buildTurnOrderPreview,
   getTurnOrderPositions,
   ROUND_ORDER_MODE_LABELS,
@@ -706,13 +711,9 @@ export default function RoomPage() {
 
   const isOwner = !!room && !!currentUser && room.creatorId === currentUser.id;
   const isPokerRoom = room?.gameType === 'poker_rounds';
-  const roomModalClassNames = {
-    wrapper: 'px-3 sm:px-6',
-    base: 'w-full max-w-[calc(100vw-1.5rem)] bg-white border border-emerald-200 shadow-2xl sm:max-w-md',
-    header: 'border-b border-default-200 px-4 py-4 sm:px-6',
-    body: 'px-4 py-5 sm:px-6 sm:py-6',
-    footer: 'flex-col-reverse gap-2 border-t border-default-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-6',
-  } as const;
+  const roomModalClassNames = buildResponsiveModalClassNames(
+    'bg-white border border-emerald-200 shadow-2xl'
+  );
   const orderedUsers = useMemo(
     () => [...users].sort((left, right) => left.playerNumber - right.playerNumber),
     [users]
@@ -1601,10 +1602,7 @@ export default function RoomPage() {
         onOpenChange={errorModal.onOpenChange}
         placement="center"
         backdrop="opaque"
-        classNames={{
-          base: '!bg-white border border-red-200',
-          backdrop: 'bg-emerald-950/20',
-        }}
+        classNames={responsiveErrorModalClassNames}
       >
         <ModalContent className="!bg-white border border-red-200">
           <ModalHeader className="flex flex-col gap-1 text-red-400">提示</ModalHeader>
@@ -1624,10 +1622,7 @@ export default function RoomPage() {
         onOpenChange={successModal.onOpenChange}
         placement="center"
         backdrop="opaque"
-        classNames={{
-          base: '!bg-white border border-green-200',
-          backdrop: 'bg-emerald-950/20',
-        }}
+        classNames={responsiveSuccessModalClassNames}
       >
         <ModalContent className="!bg-white border border-green-200">
           <ModalHeader className="flex flex-col gap-1 text-green-400">成功</ModalHeader>

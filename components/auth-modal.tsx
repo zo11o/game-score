@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { api, setCurrentUser } from '@/lib/api';
+import { responsiveModalClassNames } from '@/lib/modal-styles';
 import { generateNickname } from '@/lib/nickname-generator';
 import type { User } from '@/lib/types';
 import {
@@ -93,13 +94,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
       }}
       placement="center"
       backdrop="opaque"
-      classNames={{
-        base: '!bg-white border border-emerald-200 shadow-2xl',
-        backdrop: 'bg-emerald-950/20',
-        header: 'border-b border-default-200',
-        body: 'py-6',
-        footer: 'border-t border-default-200',
-      }}
+      classNames={responsiveModalClassNames}
     >
       <ModalContent className="!bg-white border border-emerald-200">
         <form onSubmit={handleSubmit}>
